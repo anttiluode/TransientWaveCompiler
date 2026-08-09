@@ -1,0 +1,29 @@
+name: v09-inertial-noise-sweep
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_inertial_baseline.py'
+      - 'experiments/v09_inertial_noise_sweep.py'
+      - 'docs/CIRCUIT_V09_INERTIAL_BASELINE_PREREG.md'
+      - '.github/workflows/v09-inertial-noise-sweep.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run preregistered v0.9 inertial noise diagnostic
+        run: python experiments/v09_inertial_noise_sweep.py
+      - name: Upload v0.9 diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-inertial-noise-sweep
+          path: v09-inertial-noise-sweep.json

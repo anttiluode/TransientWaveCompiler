@@ -1,0 +1,29 @@
+name: v08-kick-mechanism
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_kick_mechanism_split.py'
+      - 'docs/CIRCUIT_V08_KICK_MECHANISM_PREREG.md'
+      - '.github/workflows/v08-kick-mechanism.yml'
+  workflow_dispatch:
+
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen v0.8 switch-kick mechanism split
+        run: python experiments/v08_kick_mechanism_split.py
+      - name: Upload mechanism result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-kick-mechanism
+          path: v08-kick-mechanism-split.json

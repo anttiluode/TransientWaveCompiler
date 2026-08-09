@@ -1,0 +1,24 @@
+name: spice-c1e2-self-slicing
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'spice/check_c1e2_self_slicing.py'
+      - 'docs/CIRCUIT_C1E2_SELF_SLICING_PREREG.md'
+      - '.github/workflows/spice-c1e2-self-slicing.yml'
+  workflow_dispatch:
+
+jobs:
+  c1e2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+      - name: Run C1e2 sliced self timing study
+        run: python3 spice/check_c1e2_self_slicing.py

@@ -1,0 +1,23 @@
+name: sense-range-dev
+
+on:
+  push:
+    paths:
+      - 'transientwave/sense_range_diagnostic.py'
+      - '.github/workflows/sense-range-dev.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - run: python -m transientwave.sense_range_diagnostic
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sense-range-dev
+          path: runs/sense_range_diagnostic.json

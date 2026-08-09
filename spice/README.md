@@ -2,11 +2,11 @@
 
 This directory starts the transistor/circuit validation side of TW-1A.
 
-The current emulator-qualified architecture is **v0.5 phase-symmetric**.  The
+The current emulator-qualified architecture is **v0.5 phase-symmetric**. The
 SPICE work is intentionally staged so an ideal timing result cannot be mistaken
 for transistor feasibility.
 
-## C0a — phase-history timing harness
+## C0a — phase-history timing harness — PASS
 
 `tw1a_v05_phase_symmetry.cir` is a process-independent RC/switch experiment. It
 compares two uses of one edge dynamic node with an intentionally incomplete
@@ -15,43 +15,88 @@ compares two uses of one edge dynamic node with an intentionally incomplete
 1. `edge_seq`: reset before A only; B inherits A's dynamic-node history;
 2. `edge_sym`: reset before A **and again before B**.
 
-The expected result is:
+Measured with ngspice-42:
 
 ```text
-absolute/common A and B gain only ~0.7
-sequential A/B mismatch large
-phase-symmetric A/B mismatch ~0 in the ideal-reset abstraction
+A sequential gain       0.69868525
+B sequential gain       0.48798225
+sequential mismatch    35.511717%
+
+A symmetric gain        0.69868525
+B symmetric gain        0.69865950
+symmetric mismatch      0.003686%
 ```
 
-`check_phase_symmetry.py` parses the ngspice measurements and fails CI if those
-relationships do not hold.
+Thus the circuit simulator reproduces the emulator diagnosis: incomplete common
+settling is compatible with phase coherence, while unequal A/B phase history is
+not.
 
-This is **not** the edge MDAC transistor circuit. It proves the timing harness and
-the architectural meaning of the v0.5 reset/equalization phase.
+## C0b — signed reciprocal equivalent-cap packet — PASS
 
-## C0b — next
+`check_edge_charge_cell.py` generates ngspice decks using one equivalent selected
+edge capacitance `|code|*Cunit` and real capacitor charge redistribution into two
+endpoint sum capacitors.
 
-Replace the RC/sample abstraction with a concrete signed exact-zero
-switched-capacitor edge cell while retaining the same measurement harness:
+The sweep checks codes
 
 ```text
-8-bit signed edge code
-sample Delta z = z_i-z_j
-one reciprocal packet
-equal/opposite endpoint stamping
-EDGE_RESET before each A/B use
-foreground code->transfer calibration
+0, +1, +2, +16, +64, +127, -1, -16, -127
 ```
 
-C0b must measure the targets in `docs/CIRCUIT_V05_SPICE_HANDOFF.md`, especially:
+and passed all checks:
 
 ```text
-A/B transfer mismatch <= 1% RMS
-common settling loss   <= 30% at chosen aperture
-post-cal edge residual ~0.1% RMS
-common kick residual   <= 7e-6 state FS RMS
-diff A/B kick residual <= 3e-6 state FS RMS
+code 0                exactly zero transfer
+endpoint stamp         equal/opposite to numerical precision
+positive magnitude     monotonic
+signed transfer        correct polarity
++/- code symmetry      0.000000% at |code| 1,16,127
+```
+
+Representative measured endpoint voltages:
+
+```text
+code +1    +0.399202 mV / -0.399202 mV
+code +16   +6.201550 mV / -6.201550 mV
+code +127  +40.49552 mV / -40.49552 mV
+code -127  -40.49552 mV / +40.49552 mV
+```
+
+The measured redistribution also agrees with the analytic capacitor-sharing
+formula to the C0b tolerance.
+
+C0b proves the reciprocal signed packet abstraction, but its magnitude DAC is
+still represented by one equivalent capacitance.
+
+## C0c — explicit 7-bit magnitude array — next
+
+Replace the equivalent `|code|*Cunit` capacitor by seven independently switched
+binary branches:
+
+```text
+1, 2, 4, 8, 16, 32, 64 * Cunit
+```
+
+with exact magnitude-zero obtained by disconnecting every programmable branch.
+C0c must reproduce C0b's signed transfer across representative and exhaustive
+codes before mismatch is introduced.
+
+## C0d — unit mismatch + foreground calibration
+
+After C0c, perturb the explicit capacitor branches and switch parasitics, measure
+the resulting code->transfer map, and test whether foreground calibration can
+meet the emulator-qualified residual target without losing monotonicity or code
+headroom.
+
+The current circuit-facing targets from `docs/CIRCUIT_V05_SPICE_HANDOFF.md` are:
+
+```text
+A/B transfer mismatch       <= 1% RMS
+common settling loss        <= 30% at chosen aperture
+post-cal edge residual      ~ 0.1% RMS
+common kick residual        <= 7e-6 state FS RMS
+differential A/B kick       <= 3e-6 state FS RMS
 ```
 
 Absolute capacitor size, VDD and state voltage full scale remain intentionally
-open until C0b chooses a device/process context.
+open until a device/process context is chosen.

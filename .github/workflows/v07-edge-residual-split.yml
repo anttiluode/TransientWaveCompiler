@@ -1,0 +1,29 @@
+name: v07-edge-residual-split
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'experiments/v07_edge_residual_split.py'
+      - 'docs/CIRCUIT_V07_EDGE_RESIDUAL_SPLIT_PREREG.md'
+      - '.github/workflows/v07-edge-residual-split.yml'
+  workflow_dispatch:
+
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run controlled edge residual split
+        run: python experiments/v07_edge_residual_split.py
+      - name: Upload edge residual split
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v07-edge-residual-split
+          path: v07-edge-residual-split.json

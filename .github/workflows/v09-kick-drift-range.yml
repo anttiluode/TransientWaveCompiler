@@ -1,0 +1,28 @@
+name: v09-kick-drift-range
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_kick_drift_range_audit.py'
+      - 'docs/CIRCUIT_V09_KICK_DRIFT_RANGE_PREREG.md'
+      - '.github/workflows/v09-kick-drift-range.yml'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run trained kick-drift state-range audit
+        run: python experiments/v09_kick_drift_range_audit.py
+      - name: Upload range audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-kick-drift-range
+          path: v09-kick-drift-range-audit.json

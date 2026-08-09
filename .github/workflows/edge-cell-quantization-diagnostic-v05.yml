@@ -1,0 +1,25 @@
+name: edge-cell-quantization-diagnostic-v05
+
+on:
+  push:
+    paths:
+      - "transientwave/edge_cell_quantization_diagnostic_v05.py"
+      - "transientwave/emulator_v05.py"
+      - ".github/workflows/edge-cell-quantization-diagnostic-v05.yml"
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.edge_cell_quantization_diagnostic_v05
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edge-cell-quantization-diagnostic-v05
+          path: runs/edge_cell_quantization_diagnostic_v05.json

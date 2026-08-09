@@ -26,17 +26,26 @@ class CapacitorCodebookTests(unittest.TestCase):
         self.assertGreater(float(levels[64]), uniform64 * 1.05)
         self.assertLess(float(levels[64]), uniform64 * 1.20)
 
-    def test_signed_nearest_quantizer_preserves_exact_zero_and_sign(self):
+    def test_signed_nearest_quantizer_preserves_deadband_zero_and_sign(self):
         levels = capacitor_magnitude_levels(0.25)
-        x = np.asarray([0.0, 0.001, -0.001, 0.12, -0.12, 1.0, -1.0])
+        # With Cunit/Csum=1e-3, the first physical nonzero level is about
+        # 2.46e-3 in edge-coefficient units, so requests below half that level
+        # correctly quantize to exact zero. This is a real C0c codebook deadband,
+        # not a software quantizer bug.
+        self.assertGreater(float(levels[1]), 0.002)
+        x = np.asarray(
+            [0.0, 0.001, -0.001, 0.003, -0.003, 0.12, -0.12, 1.0, -1.0]
+        )
         q = nearest_signed_codebook(x, levels)
         self.assertEqual(q[0], 0.0)
-        self.assertGreater(q[1], 0.0)
-        self.assertLess(q[2], 0.0)
+        self.assertEqual(q[1], 0.0)
+        self.assertEqual(q[2], 0.0)
         self.assertGreater(q[3], 0.0)
         self.assertLess(q[4], 0.0)
-        self.assertEqual(q[5], levels[-1])
-        self.assertEqual(q[6], -levels[-1])
+        self.assertGreater(q[5], 0.0)
+        self.assertLess(q[6], 0.0)
+        self.assertEqual(q[7], levels[-1])
+        self.assertEqual(q[8], -levels[-1])
 
     def test_tile_uses_a_physical_c0c_level_for_each_edge(self):
         task = compile_temporal_order_task(810)

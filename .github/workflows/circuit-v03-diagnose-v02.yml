@@ -1,0 +1,27 @@
+name: circuit-v03-diagnose-v02
+
+on:
+  push:
+    branches:
+      - agent/tw1a-circuit-architecture-v01
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Diagnose residual v0.3 interactions
+        run: python experiments/circuit_v03_corner_diagnose_v02.py
+      - name: Upload diagnostic result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v03-corner-diagnose-v02
+          path: circuit-v03-corner-diagnose-v02.json
+          if-no-files-found: warn

@@ -1,8 +1,9 @@
-"""Process-parameterized C1/v0.7 feedback, thermal, area and energy budgets.
+"""Process-parameterized C1 feedback, thermal, area and energy budgets.
 
-Nothing in this module is a foundry claim.  It converts explicit assumptions
+Nothing in this module is a foundry claim. It converts explicit assumptions
 into auditable numbers so MIM density, SRAM-cell area, state voltage, topology
-factor and amplifier targets can be changed without rewriting prose.
+factor, amplifier targets and time/area trades can be changed without rewriting
+prose.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ def state_capacitance_for_ktc(
     """Effective state capacitance in F for sqrt(f*kT/C)/VFS <= b.
 
     ``topology_noise_factor`` keeps differential/common-mode implementation
-    uncertainty explicit.  Use 1 for the scalar emulator law; larger values
+    uncertainty explicit. Use 1 for the scalar emulator law; larger values
     conservatively represent extra independent sampled-noise contributions.
     """
     b = float(base_fraction)
@@ -33,6 +34,38 @@ def state_capacitance_for_ktc(
     if b <= 0 or v <= 0 or t <= 0 or f <= 0:
         raise ValueError("thermal sizing arguments must be positive")
     return f * K_B * t / (b * v) ** 2
+
+
+def thermal_capacitance_ratio(reference_b: float, candidate_b: float) -> float:
+    """Candidate/reference kT/C capacitance at fixed VFS, T and topology.
+
+    Since C is proportional to 1/b^2,
+
+        C_candidate / C_reference = (b_reference / b_candidate)^2.
+    """
+    b0 = float(reference_b)
+    b1 = float(candidate_b)
+    if b0 <= 0 or b1 <= 0 or not math.isfinite(b0) or not math.isfinite(b1):
+        raise ValueError("thermal bases must be finite and positive")
+    return (b0 / b1) ** 2
+
+
+def averaged_echo_ideal_cap_energy_ratio(
+    reference_b: float,
+    candidate_b: float,
+    repeats_per_update: int,
+) -> float:
+    """Ideal sampled-cap switching-work ratio for an averaging trade.
+
+    This is deliberately only the C*V^2-like capacitor term. It assumes the
+    same voltage swing and switching activity per physical echo and compares
+    one reference echo/update with ``repeats_per_update`` candidate echoes.
+    OTA, clock, converter, reference and credit-path energy are excluded.
+    """
+    m = int(repeats_per_update)
+    if m < 1:
+        raise ValueError("repeats_per_update must be >=1")
+    return m * thermal_capacitance_ratio(reference_b, candidate_b)
 
 
 def feedback_factor(total_input_cap_over_cstate: float) -> float:

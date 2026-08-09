@@ -1,9 +1,6 @@
 name: circuit-v03-diagnose
 
 on:
-  push:
-    branches:
-      - agent/tw1a-circuit-architecture-v01
   workflow_dispatch:
 
 jobs:

@@ -17,3 +17,5 @@ jobs:
       - run: twc examples/three_node.json -o /tmp/three_node.tw1.json
       - run: twc examples/continuous_three_node.json -o /tmp/continuous_three_node.tw1.json
       - run: twc-tw1a examples/continuous_three_node.json -o /tmp/continuous_three_node.tw1a.json
+      - run: twc-hw examples/continuous_three_node.json > /tmp/continuous_three_node.hardware.txt
+      - run: twc-hw examples/continuous_three_node.json --json > /tmp/continuous_three_node.hardware.json

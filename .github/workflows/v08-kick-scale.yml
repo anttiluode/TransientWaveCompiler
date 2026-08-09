@@ -1,0 +1,29 @@
+name: v08-kick-scale
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_kick_scale_sweep.py'
+      - 'docs/CIRCUIT_V08_KICK_SCALE_PREREG.md'
+      - '.github/workflows/v08-kick-scale.yml'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen v0.8 switch-kick residual scale sweep
+        run: python experiments/v08_kick_scale_sweep.py
+      - name: Upload kick-scale result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-kick-scale
+          path: v08-kick-scale-sweep.json

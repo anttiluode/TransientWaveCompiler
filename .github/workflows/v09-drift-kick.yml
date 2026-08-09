@@ -1,0 +1,33 @@
+name: v09-drift-kick
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_drift_kick.py'
+      - 'experiments/v09_drift_kick_sweep.py'
+      - 'docs/CIRCUIT_V09_DRIFT_KICK_PREREG.md'
+      - '.github/workflows/v09-drift-kick.yml'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    strategy:
+      fail-fast: false
+      matrix:
+        axis: [common, diff]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run drift residual axis
+        run: python experiments/v09_drift_kick_sweep.py --axis ${{ matrix.axis }}
+      - name: Upload axis result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-drift-kick-${{ matrix.axis }}
+          path: v09-drift-kick-${{ matrix.axis }}.json

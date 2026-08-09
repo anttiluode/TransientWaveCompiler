@@ -1,0 +1,36 @@
+name: v09-fixed-task-factorial
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
+      - 'experiments/v09_fixed_task_factorial.py'
+      - 'tests/test_v09_partitioned_rng.py'
+      - 'docs/BENCHMARK_V09_FIXED_TASK_FACTORIAL_PREREG.md'
+      - '.github/workflows/v09-fixed-task-factorial.yml'
+  workflow_dispatch:
+
+jobs:
+  factorial:
+    strategy:
+      fail-fast: false
+      matrix:
+        fabrication_seed: [2400, 2401, 2402, 2403, 2404]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Verify partitioned RNG invariants
+        run: python -m unittest tests.test_v09_partitioned_rng -v
+      - name: Run one fabrication across five dynamic replicates
+        run: python experiments/v09_fixed_task_factorial.py --fabrication-seed ${{ matrix.fabrication_seed }}
+      - name: Upload factorial result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-fixed-task-fab-${{ matrix.fabrication_seed }}
+          path: v09-fixed-task-fab-${{ matrix.fabrication_seed }}.json

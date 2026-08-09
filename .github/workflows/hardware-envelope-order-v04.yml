@@ -1,0 +1,29 @@
+name: hardware-envelope-order-v04
+
+on:
+  push:
+    paths:
+      - "transientwave/hardware_envelope_order_v04.py"
+      - "transientwave/emulator_v03.py"
+      - "transientwave/order_contrast.py"
+      - "transientwave/order_benchmarks.py"
+      - "docs/HARDWARE_ENVELOPE_ORDER_PREREG_V04.md"
+      - ".github/workflows/hardware-envelope-order-v04.yml"
+  workflow_dispatch:
+
+jobs:
+  envelope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen exact-point hardware envelope
+        run: python -m transientwave.hardware_envelope_order_v04
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hardware-envelope-order-v04
+          path: runs/hardware_envelope_order_v04.json

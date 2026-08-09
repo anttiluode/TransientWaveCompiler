@@ -1,0 +1,27 @@
+name: circuit-v04-corner
+
+on:
+  push:
+    branches:
+      - agent/tw1a-calibration-first-v04
+  workflow_dispatch:
+
+jobs:
+  corner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run preregistered v0.4 calibration-first corner
+        run: python experiments/circuit_v04_corner.py
+      - name: Upload v0.4 corner result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v04-corner
+          path: circuit-v04-corner.json
+          if-no-files-found: warn

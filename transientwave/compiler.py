@@ -1,7 +1,8 @@
 """WaveProgram -> reversible TW-1 manifest compiler.
 
-The v0.1 compiler intentionally implements only the exact scalar-damping path.
-It is better to reject a model than silently approximate a physical semantic.
+The executable v0.1 path is intentionally narrow: linear, reciprocal, scalar-damped
+second-order wave systems. The compiler rejects unsupported physics rather than
+silently approximating it.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ class CompileError(RuntimeError):
         self.message = message
 
 
-def _matrix(x: tuple[tuple[float, ...], ...] | None, n: int, name: str) -> np.ndarray:
+def _matrix(x, n: int, name: str) -> np.ndarray:
     if x is None:
         raise CompileError("E001 MISSING_MATRIX", f"{name} is required")
     a = np.asarray(x, dtype=float)
@@ -67,6 +68,67 @@ def _waveform(values: tuple[float, ...], steps: int) -> np.ndarray:
     return out
 
 
+def _check_reciprocal(program: Program, A: np.ndarray, name: str) -> float:
+    asym = _symmetry_error(A)
+    c = program.constraints
+    if c.require_reciprocal and asym > c.max_operator_asymmetry:
+        raise CompileError(
+            "E101 NONRECIPROCAL",
+            f"{name} asymmetry {asym:.3e} exceeds {c.max_operator_asymmetry:.3e}",
+        )
+    return asym
+
+
+def _lower_source_recurrence(program: Program) -> dict[str, Any]:
+    """Lower the source model to x[n+1]=M x[n]-a x[n-1]+drive_scale*source[n]."""
+    n = program.state.nodes
+    d = program.dynamics
+
+    if d.form == "damped_second_order":
+        a = float(d.a)  # type: ignore[arg-type]
+        M = _matrix(d.M, n, "M")
+        asym = _check_reciprocal(program, M, "M")
+        return {
+            "kind": "damped_second_order",
+            "a": a,
+            "M": M,
+            "drive_scale": 1.0,
+            "source_operator_asymmetry": asym,
+            "integration": "already_discrete",
+        }
+
+    if d.form == "continuous_damped_wave":
+        if d.integration != "semi_implicit_euler":
+            raise CompileError(
+                "E090 INTEGRATION_SCHEME",
+                f"continuous_damped_wave supports only semi_implicit_euler in v0.1, got {d.integration!r}",
+            )
+        gamma = float(d.gamma)  # type: ignore[arg-type]
+        if gamma < 0:
+            raise CompileError("E091 NEGATIVE_DAMPING", f"gamma must be >= 0, got {gamma}")
+        H = _matrix(d.H, n, "H")
+        asym = _check_reciprocal(program, H, "H")
+        a = 1.0 - program.dt * gamma
+        M = (1.0 + a) * np.eye(n) - (program.dt**2) * H
+        return {
+            "kind": "continuous_damped_wave",
+            "a": a,
+            "M": M,
+            "H": H,
+            "gamma": gamma,
+            "drive_scale": program.dt**2,
+            "source_operator_asymmetry": asym,
+            "integration": "semi_implicit_euler",
+            "lowering_equations": {
+                "velocity": "v[n+1]=(1-dt*gamma)v[n]-dt*H*x[n]+dt*source[n]",
+                "position": "x[n+1]=x[n]+dt*v[n+1]",
+                "second_order": "x[n+1]=M*x[n]-a*x[n-1]+dt^2*source[n]",
+            },
+        }
+
+    raise CompileError("E099 DYNAMICS_FORM", f"{d.form!r} has no damped source lowering")
+
+
 def _compile_objective(program: Program, r: float) -> dict[str, Any]:
     obj = program.objective
     names = {p.name: p for p in program.ports}
@@ -79,7 +141,6 @@ def _compile_objective(program: Program, r: float) -> dict[str, Any]:
             f"objective port {p.name!r} must be sense/error, got {p.kind!r}",
         )
 
-    # Sense convention: sample k=0 observes state index n=k+1 after the kth mesh clock.
     state_index = np.arange(1, program.steps + 1, dtype=float)
     state_scale = r ** state_index
 
@@ -106,7 +167,7 @@ def _compile_objective(program: Program, r: float) -> dict[str, Any]:
         "source_domain_weights": source_weights.tolist(),
         "compiled_quadratic_weights": compiled_weights.tolist(),
         "compiled_error_multiplier": (2.0 * compiled_weights).tolist(),
-        "note": "error injection sample also multiplies the measured compiled port state z[k]",
+        "note": "error sample = compiled_error_multiplier[k] * measured compiled output z[k+1]",
     }
 
 
@@ -122,20 +183,41 @@ def compile_program(program: Program) -> dict[str, Any]:
             "E011 PORT_LIMIT", f"program has {len(program.ports)} ports; limit is {c.max_ports}"
         )
 
-    gauge: dict[str, Any]
-    if program.dynamics.form == "damped_second_order":
-        a = float(program.dynamics.a)  # type: ignore[arg-type]
+    source_lowering: dict[str, Any]
+    if program.dynamics.form == "reversible_second_order":
+        Q = _matrix(program.dynamics.Q, n, "Q")
+        asym = _check_reciprocal(program, Q, "Q")
+        r = 1.0
+        drive_scale = 1.0
+        input_envelope = np.ones(program.steps, dtype=float)
+        state_scale = np.ones(program.steps + 1, dtype=float)
+        z0 = np.asarray(program.state.initial, dtype=float)
+        zprev = np.asarray(program.state.initial_previous, dtype=float)
+        source_lowering = {
+            "kind": "reversible_second_order",
+            "drive_scale": 1.0,
+            "source_operator_asymmetry": asym,
+            "integration": "already_reversible",
+        }
+        gauge = {
+            "kind": "identity",
+            "a": 1.0,
+            "r": r,
+            "input_envelope": input_envelope.tolist(),
+            "state_scale_psi_over_z": state_scale.tolist(),
+            "max_input_gain": 1.0,
+            "z_initial_from_psi_initial": 1.0,
+            "z_previous_from_psi_previous": 1.0,
+        }
+    else:
+        source_lowering = _lower_source_recurrence(program)
+        M = np.asarray(source_lowering["M"], dtype=float)
+        a = float(source_lowering["a"])
+        drive_scale = float(source_lowering["drive_scale"])
         if not (0.0 < a <= 1.0):
             raise CompileError(
                 "E100 DAMPING_RANGE",
-                f"exact damping-gauge backend requires 0 < a <= 1, got {a}",
-            )
-        M = _matrix(program.dynamics.M, n, "M")
-        asym = _symmetry_error(M)
-        if c.require_reciprocal and asym > c.max_operator_asymmetry:
-            raise CompileError(
-                "E101 NONRECIPROCAL",
-                f"M asymmetry {asym:.3e} exceeds {c.max_operator_asymmetry:.3e}",
+                f"exact damping-gauge backend requires 0 < a <= 1 after lowering, got {a}",
             )
         r = math.sqrt(a)
         Q = M / r
@@ -145,7 +227,7 @@ def compile_program(program: Program) -> dict[str, Any]:
         if max_gain > c.max_boundary_gain:
             raise CompileError(
                 "E305 BOUNDARY_GAIN",
-                f"required input envelope reaches {max_gain:.6g}x, limit is {c.max_boundary_gain:.6g}x",
+                f"required damping-gauge envelope reaches {max_gain:.6g}x, limit is {c.max_boundary_gain:.6g}x",
             )
         gauge = {
             "kind": "scalar_damping_gauge",
@@ -159,39 +241,8 @@ def compile_program(program: Program) -> dict[str, Any]:
         }
         z0 = np.asarray(program.state.initial, dtype=float)
         zprev = r * np.asarray(program.state.initial_previous, dtype=float)
-    elif program.dynamics.form == "reversible_second_order":
-        Q = _matrix(program.dynamics.Q, n, "Q")
-        asym = _symmetry_error(Q)
-        if c.require_reciprocal and asym > c.max_operator_asymmetry:
-            raise CompileError(
-                "E101 NONRECIPROCAL",
-                f"Q asymmetry {asym:.3e} exceeds {c.max_operator_asymmetry:.3e}",
-            )
-        r = 1.0
-        input_envelope = np.ones(program.steps, dtype=float)
-        gauge = {
-            "kind": "identity",
-            "a": 1.0,
-            "r": 1.0,
-            "input_envelope": input_envelope.tolist(),
-            "state_scale_psi_over_z": np.ones(program.steps + 1).tolist(),
-            "max_input_gain": 1.0,
-            "z_initial_from_psi_initial": 1.0,
-            "z_previous_from_psi_previous": 1.0,
-        }
-        z0 = np.asarray(program.state.initial, dtype=float)
-        zprev = np.asarray(program.state.initial_previous, dtype=float)
-    else:  # parser should already prevent this
-        raise CompileError("E099 DYNAMICS_FORM", program.dynamics.form)
 
-    asym_q = _symmetry_error(Q)
-    if c.require_reciprocal and asym_q > c.max_operator_asymmetry:
-        raise CompileError(
-            "E101 NONRECIPROCAL",
-            f"compiled Q asymmetry {asym_q:.3e} exceeds tolerance",
-        )
-
-    # Exact backend is symmetric, therefore eigvalsh is appropriate and auditable.
+    asym_q = _check_reciprocal(program, Q, "compiled Q")
     evals = np.linalg.eigvalsh((Q + Q.T) * 0.5)
     lo = float(np.min(evals))
     hi = float(np.max(evals))
@@ -208,22 +259,20 @@ def compile_program(program: Program) -> dict[str, Any]:
     drive_count = 0
     for p in program.ports:
         vector = _port_vector(program, p)
-        rec: dict[str, Any] = {
-            "name": p.name,
-            "kind": p.kind,
-            "vector": vector.tolist(),
-        }
+        rec: dict[str, Any] = {"name": p.name, "kind": p.kind, "vector": vector.tolist()}
         if p.kind == "drive":
             drive_count += 1
             source_wave = _waveform(p.waveform, program.steps)
-            compiled_wave = source_wave * input_envelope
+            recurrence_wave = source_wave * drive_scale
+            compiled_wave = recurrence_wave * input_envelope
             port_limit = c.max_boundary_gain if p.gain_limit is None else p.gain_limit
-            if np.max(np.abs(compiled_wave)) > port_limit + 1e-15:
+            if float(np.max(np.abs(compiled_wave))) > port_limit + 1e-15:
                 raise CompileError(
                     "E306 PORT_GAIN",
-                    f"compiled waveform on port {p.name!r} exceeds gain/amplitude limit {port_limit}",
+                    f"compiled waveform on port {p.name!r} exceeds amplitude limit {port_limit}",
                 )
             rec["source_waveform"] = source_wave.tolist()
+            rec["recurrence_waveform"] = recurrence_wave.tolist()
             rec["compiled_waveform"] = compiled_wave.tolist()
         compiled_ports.append(rec)
 
@@ -240,17 +289,29 @@ def compile_program(program: Program) -> dict[str, Any]:
         seen_edges.add(ij)
         if e.minimum > e.maximum:
             raise CompileError("E182 EDGE_RANGE", f"edge {ij} has min > max")
-        # Source parameter semantics:
-        # dM/dtheta = matrix_scale * (ei-ej)(ei-ej)^T.
-        # Q=M/r, hence local compiled overlap is scaled by matrix_scale/r.
+
+        if e.parameter_space == "recurrence_M":
+            source_matrix_scale = e.scale
+        elif e.parameter_space == "stiffness_H":
+            if source_lowering["kind"] != "continuous_damped_wave":
+                raise CompileError(
+                    "E183 EDGE_PARAMETER_SPACE",
+                    "stiffness_scale is legal only with continuous_damped_wave",
+                )
+            source_matrix_scale = -(program.dt**2) * e.scale
+        else:
+            raise CompileError("E183 EDGE_PARAMETER_SPACE", e.parameter_space)
+
         trainable.append(
             {
                 "edge": [e.i, e.j],
                 "group": e.group,
                 "min": e.minimum,
                 "max": e.maximum,
-                "source_matrix_scale": e.matrix_scale,
-                "compiled_credit_scale": e.matrix_scale / r,
+                "parameter_space": e.parameter_space,
+                "declared_parameter_scale": e.scale,
+                "source_matrix_scale": source_matrix_scale,
+                "compiled_credit_scale": source_matrix_scale / r,
                 "parameterization": "rank1_edge_difference",
             }
         )
@@ -268,11 +329,16 @@ def compile_program(program: Program) -> dict[str, Any]:
             "E400 PARTITION_REQUIRED",
             f"TW-1 v0.1 logical tile has {tile_size} nodes; program needs {tile_count} tiles and allow_partition=false",
         )
-
     node_map = [
         {"logical_node": i, "tile": i // tile_size, "tile_node": i % tile_size}
         for i in range(n)
     ]
+
+    serializable_lowering = {
+        k: (v.tolist() if isinstance(v, np.ndarray) else v)
+        for k, v in source_lowering.items()
+        if k != "H"
+    }
 
     return {
         "format": "tw1-manifest-v0.1",
@@ -280,6 +346,7 @@ def compile_program(program: Program) -> dict[str, Any]:
         "steps": program.steps,
         "dt": program.dt,
         "backend": "tw1-clocked-mixed-signal",
+        "source_lowering": serializable_lowering,
         "recurrence": "z[n+1] = Q z[n] - z[n-1] + source[n]",
         "Q": Q.tolist(),
         "initial_state": z0.tolist(),
@@ -288,6 +355,7 @@ def compile_program(program: Program) -> dict[str, Any]:
         "ports": compiled_ports,
         "objective": objective,
         "trainable_edges": trainable,
+        "node_map": node_map,
         "stability": {
             "eigenvalue_min": lo,
             "eigenvalue_max": hi,
@@ -319,9 +387,9 @@ def compile_program(program: Program) -> dict[str, Any]:
             "local_observable": "(E_plus - E_minus)/4",
         },
         "diagnostics": {
-            "source_operator_asymmetry": asym,
+            "source_operator_asymmetry": float(source_lowering["source_operator_asymmetry"]),
             "compiled_operator_asymmetry": asym_q,
-            "note": "v0.1 emits logical placement only; coefficient quantization and physical routing are future backend passes",
+            "note": "logical backend only; physical routing and coefficient quantization are later passes",
         },
     }
 
@@ -334,19 +402,28 @@ def compile_json_file(path: str | Path) -> dict[str, Any]:
 def simulate_source(program: Program) -> np.ndarray:
     """Reference source-domain state history, including state index 0."""
     n = program.state.nodes
-    if program.dynamics.form != "damped_second_order":
-        raise ValueError("simulate_source currently expects damped_second_order")
-    M = _matrix(program.dynamics.M, n, "M")
-    a = float(program.dynamics.a)  # type: ignore[arg-type]
+    if program.dynamics.form == "reversible_second_order":
+        M = _matrix(program.dynamics.Q, n, "Q")
+        a = 1.0
+        drive_scale = 1.0
+    else:
+        low = _lower_source_recurrence(program)
+        M = np.asarray(low["M"], dtype=float)
+        a = float(low["a"])
+        drive_scale = float(low["drive_scale"])
+
     x_prev = np.asarray(program.state.initial_previous, dtype=float).copy()
     x = np.asarray(program.state.initial, dtype=float).copy()
     hist = [x.copy()]
-    drive_ports = [(p, _port_vector(program, p), _waveform(p.waveform, program.steps))
-                   for p in program.ports if p.kind == "drive"]
+    drives = [
+        (_port_vector(program, p), _waveform(p.waveform, program.steps))
+        for p in program.ports
+        if p.kind == "drive"
+    ]
     for k in range(program.steps):
         source = np.zeros(n, dtype=float)
-        for _p, b, w in drive_ports:
-            source += b * w[k]
+        for b, w in drives:
+            source += b * (drive_scale * w[k])
         nxt = M @ x - a * x_prev + source
         x_prev, x = x, nxt
         hist.append(x.copy())
@@ -360,8 +437,11 @@ def simulate_compiled(program: Program, manifest: dict[str, Any] | None = None) 
     z_prev = np.asarray(man["initial_previous"], dtype=float).copy()
     z = np.asarray(man["initial_state"], dtype=float).copy()
     hist = [z.copy()]
-    drives = [(np.asarray(p["vector"], dtype=float), np.asarray(p["compiled_waveform"], dtype=float))
-              for p in man["ports"] if p["kind"] == "drive"]
+    drives = [
+        (np.asarray(p["vector"], dtype=float), np.asarray(p["compiled_waveform"], dtype=float))
+        for p in man["ports"]
+        if p["kind"] == "drive"
+    ]
     for k in range(program.steps):
         source = np.zeros(program.state.nodes, dtype=float)
         for b, w in drives:

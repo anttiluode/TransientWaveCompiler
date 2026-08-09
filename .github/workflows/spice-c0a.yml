@@ -23,5 +23,6 @@ jobs:
         run: ngspice -b -o /tmp/tw1a-c0a.log spice/tw1a_v05_phase_symmetry.cir
       - name: Check phase-symmetry measurements
         run: |
+          echo "--- ngspice C0a measurements ---"
           cat /tmp/tw1a-c0a.log
           python spice/check_phase_symmetry.py /tmp/tw1a-c0a.log

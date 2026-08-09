@@ -1,0 +1,27 @@
+name: circuit-v05-spice-sweep
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen v0.5 SPICE handoff sweeps
+        run: python experiments/circuit_v05_spice_budget_sweep.py
+      - name: Upload SPICE handoff sweep result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v05-spice-budget-sweep
+          path: circuit-v05-spice-budget-sweep.json
+          if-no-files-found: warn

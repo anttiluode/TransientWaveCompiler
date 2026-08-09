@@ -1,0 +1,26 @@
+name: full-update-coherent-drift-v01
+
+on:
+  push:
+    paths:
+      - "transientwave/full_update_coherent.py"
+      - "transientwave/full_update_coherent_drift_v01.py"
+      - "docs/FULL_UPDATE_COHERENT_DRIFT_PREREG_V01.md"
+      - ".github/workflows/full-update-coherent-drift-v01.yml"
+  workflow_dispatch:
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.full_update_coherent_drift_v01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-update-coherent-drift-v01
+          path: runs/full_update_coherent_drift_v01.json

@@ -1,0 +1,37 @@
+name: published-cross-coupled-filter-v03
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/coupled_resonator_filter.py'
+      - 'transientwave/generalized_coupling_matrix.py'
+      - 'tests/test_generalized_coupling_matrix.py'
+      - 'experiments/published_cross_coupled_filter_v03.py'
+      - 'docs/BENCHMARK_PUBLISHED_CROSS_COUPLED_FILTER_V03_PREREG.md'
+      - '.github/workflows/published-cross-coupled-filter-v03.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, B, C, D, E]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit explicit source-load matrix and gradient
+        run: python -m unittest tests.test_generalized_coupling_matrix -v
+      - name: Tune published four-zero coupling topology
+        run: python experiments/published_cross_coupled_filter_v03.py --start ${{ matrix.start }}
+      - name: Upload tuning result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-cross-coupled-filter-v03-${{ matrix.start }}
+          path: published-cross-coupled-filter-v03-*.json

@@ -1,0 +1,23 @@
+name: joint-seed-ideal-diagnostic
+
+on:
+  push:
+    paths:
+      - "transientwave/joint_seed_ideal_diagnostic.py"
+      - ".github/workflows/joint-seed-ideal-diagnostic.yml"
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.joint_seed_ideal_diagnostic
+      - uses: actions/upload-artifact@v4
+        with:
+          name: joint-seed-ideal-diagnostic
+          path: runs/joint_seed_ideal_diagnostic.json

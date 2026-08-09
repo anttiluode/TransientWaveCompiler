@@ -1,0 +1,29 @@
+name: spice-c1-additivity
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'spice/check_c1b_passive_additivity.py'
+      - 'spice/check_c1c_virtual_sum.py'
+      - '.github/workflows/spice-c1-additivity.yml'
+  workflow_dispatch:
+
+jobs:
+  c1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+      - name: C1b passive NEXT rejection
+        run: python spice/check_c1b_passive_additivity.py
+      - name: C1c active virtual-sum additivity
+        run: python spice/check_c1c_virtual_sum.py

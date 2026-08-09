@@ -1,0 +1,29 @@
+name: v08-combined-thermal-sweep
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_combined_thermal_sweep.py'
+      - 'docs/CIRCUIT_V08_COMBINED_THERMAL_SWEEP_PREREG.md'
+      - '.github/workflows/v08-combined-thermal-sweep.yml'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen combined thermal budget sweep
+        run: python experiments/v08_combined_thermal_sweep.py
+      - name: Upload combined thermal result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-combined-thermal-sweep
+          path: v08-combined-thermal-sweep.json

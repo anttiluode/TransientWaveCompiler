@@ -77,8 +77,10 @@ resolution remains.
 All other blocks keep their exact formal values.
 
 `perfect_converters`
-: after construction, disable weight/edge, self, drive, sense and error
-quantization and rebuild the programmed Q; all analog disorder remains.
+: after construction, disable self, drive, sense and error quantization and
+rebuild the programmed Q. The measured 127-level physical edge capacitor
+codebook remains because it is the edge actuator itself in v0.8, not a separate
+converter setting. All analog disorder remains.
 
 No single-block condition is added or removed after results are observed.
 

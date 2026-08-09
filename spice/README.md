@@ -1,168 +1,237 @@
 # TW-1A SPICE bring-up
 
-This directory is the circuit-validation side of the emulator-qualified
-**TW-1A v0.5 phase-symmetric** architecture.  The ladder is staged so an ideal
-timing result cannot be mistaken for transistor feasibility.
+This directory is the process-independent circuit-validation side of the
+TW-1A research architecture. The active learning reference is now **v0.8
+common/difference active summing**; older C0 tests are retained because they
+record why the architecture changed.
 
-## Current status
+These decks are not transistor/foundry qualification. They use idealized or
+first-order active elements to kill topology/timing ideas before MOS sizing.
 
-```text
-C0a  phase-history reset/equalization       PASS in ngspice
-C0b  signed reciprocal charge packet        PASS in ngspice
-C0c  explicit 7-bit magnitude cap array     PASS in ngspice
-C0c->learning nominal nonlinear codebook    QUALIFIED 10/10
-C0d  mismatch topology study                PASS / segmented selected
-C0d->learning 3% per-edge mismatch          QUALIFIED 10/10
-C0e  absolute state-noise / capacitance     IN PROGRESS
-```
-
-## C0a — phase-history timing harness — PASS
-
-`tw1a_v05_phase_symmetry.cir` compares one shared edge dynamic node with and
-without the v0.5 reset before B.  The aperture is intentionally only ~70%
-settled.
-
-Measured with ngspice-42:
+## Current ladder
 
 ```text
-A sequential gain       0.69868525
-B sequential gain       0.48798225
-sequential mismatch    35.511717%
+C0a  A/B phase-history reset/equalization        PASS
+C0b  signed reciprocal charge packet             PASS
+C0c  explicit capacitor magnitude array          PASS
+C0d  unit mismatch / segmentation                PASS; 4+3 selected
+C0e  circuit-native edge kT/C bridge             QUALIFIED in emulator
 
-A symmetric gain        0.69868525
-B symmetric gain        0.69865950
-symmetric mismatch      0.003686%
+C1b  passive precharged NEXT accumulation        REJECTED
+C1c  active virtual-sum accumulation             PASS
+C1d  finite DC gain                              PASS / budgeted
+C1e  monolithic |self|=3 timing                  REJECTED
+C1e2 two-slice self timing                       PASS
+C1e3 one half-range self bank reused twice       PASS
 ```
 
-The circuit simulator therefore reproduces the emulator diagnosis: incomplete
-**common** settling is compatible with learning; unequal A/B phase history is
-not.
+The most important rule of this directory is: **failed gates remain part of the design record.** C1b and C1e directly caused better architectures.
 
-## C0b — signed reciprocal equivalent-cap packet — PASS
+---
 
-`check_edge_charge_cell.py` uses real capacitor redistribution with one
-equivalent selected capacitance `|code|*Cunit`.
+## C0a — phase-history timing
 
-The tested signed codes passed:
+`tw1a_v05_phase_symmetry.cir` showed that incomplete **common** settling is much less dangerous than unequal analog history between reverse contexts.
 
 ```text
-code 0                exactly zero transfer
-endpoint stamp         equal/opposite
-positive magnitude     monotonic
-signed transfer        correct polarity
-+/- code symmetry      0.000000% at tested mirrors
+old sequential A/B mismatch     35.511717%
+reset-symmetric mismatch         0.003686%
 ```
 
-Representative endpoint motion:
+v0.8 later removed the old stored `F+A` / `F-A` reverse pair entirely by using common/difference coordinates, but C0a remains the evidence that motivated same-element phase symmetry.
+
+## C0b/C0c/C0d — reciprocal edge capacitor bank
+
+The edge cell established:
 
 ```text
-code +1    +0.399202 mV / -0.399202 mV
-code +16   +6.201550 mV / -6.201550 mV
-code +127  +40.49552 mV / -40.49552 mV
-code -127  -40.49552 mV / +40.49552 mV
+exact zero/off code
+correct sign
+equal/opposite endpoint stamp
+monotonic positive magnitude
+mirrored +/- polarity
 ```
 
-## C0c — explicit 7-bit array — PASS
-
-`check_binary_edge_array.py` replaced the equivalent capacitor with seven
-physical magnitude branches
+The explicit array and mismatch study selected
 
 ```text
-1, 2, 4, 8, 16, 32, 64 * Cunit.
+lower bank: 1,2,4,8 units
+upper bank: seven ordered 16-unit thermometer segments
+physical units: 127 / edge
+selectable magnitude branches: 11
 ```
 
-After separating the static topology test from C0a's speed test and separating
-DC numerical anchors from off-switch isolation, ngspice passed:
+The current emulator adds 3% RMS unit-cap mismatch and 1% RMS site-common
+`Cunit/Cstate` mismatch and uses a nominal positive range of 0.265 so all 112
+sites retain the compiler-required 0.250 range with useful yield margin.
+
+---
+
+# C1 — node active summing
+
+## C1b — passive NEXT accumulation — REJECTED
+
+`check_c1b_passive_additivity.py` directly connects a sampled capacitor to a
+precharged destination state. The packet depends on the destination's existing
+charge, exactly as a charge-sharing first-order lag predicts.
+
+Frozen result:
 
 ```text
-positive codes checked             128 (exhaustive 0..127)
-negative mirror codes checked        9
-max array vs analytic error       0.000163%
-max endpoint common residual      0 V (reported precision)
-max tested sign asymmetry         0.000000%
-zero-code differential leak       3.46e-13 V
+state-dependent additivity error ~50.000077%
 ```
 
-The physical level spacing is intentionally nonlinear because of capacitor
-charge sharing.  That nonlinear codebook was fed back into the full v0.5
-emulator on untouched bodies 1600–1609 and **qualified 10/10**.  See
-`docs/CIRCUIT_V05_CAPCODEBOOK_RESULT.md`.
+This kills passive charge sharing as the node accumulator.
 
-## C0d — unit mismatch and segmentation — PASS
+## C1c — active virtual-sum accumulation — PASS
 
-A frozen 5000-sample-per-point mismatch study compared the same 127 unit
-capacitors as:
+`check_c1c_virtual_sum.py` transfers the same sampled charge into a virtual
+summing node with a feedback/state capacitor.
+
+Frozen result:
 
 ```text
-pure 7-bit binary
-4-bit binary + 3-bit thermometer segmentation
-full thermometer
+packet magnitude                 25.600 mV
+packet mismatch vs stored state  numerical floor
+virtual-node excursion           ~0.001744 uV in ideal-gain deck
 ```
 
-At 3% iid unit-cap mismatch:
+This is the architectural basis for the active-summing emulator. It is not yet a transistor OTA claim.
+
+## C1d — finite DC gain — PASS / budgeted
+
+`check_c1d_finite_gain.py` sweeps first-order open-loop gain under the actual
+capacitive feedback factors. The point of the test is to avoid treating
+`A0=1e5` as sacred.
+
+Representative frozen 0.1% packet marker:
 
 ```text
-pure binary monotonic yield       99.82%
-segmented 4+3 monotonic yield    100.00%
-full thermometer yield           100.00%
+edge load, Cin/Cf=0.265      first passing A0 ~3,000
+old unsliced self, Cin/Cf=3  first passing A0 ~30,000
 ```
 
-Pure binary failures appeared at the expected large carry (`63->64`).  The
-working topology is therefore:
+Fixed node gain can also be compiler-calibrated through the tested diagonal
+similarity transform when it is stable, positive and measured. Drift,
+nonlinearity and context dependence remain real residuals.
+
+## C1e — monolithic self transfer — REJECTED
+
+`check_c1e_finite_bandwidth.py` includes the worst self input load rather than
+specifying GBW from a friendly edge case.
+
+At `Cin/Cf=3` and a 20 ns aperture, the monolithic self packet misses the frozen
+0.1% magnitude marker even at 1 GHz. The edge path itself passes at much lower
+GBW.
+
+The failure is a load/topology problem, not a request for a multi-GHz OTA.
+
+## C1e2 — self slicing — PASS
+
+`check_c1e2_self_slicing.py` holds the mathematical self coefficient fixed and
+splits its charge transfer.
 
 ```text
-lower magnitude bank   1,2,4,8 unit groups
-upper magnitude bank   seven ordered 16-unit thermometer segments
-physical units total   127
-selectable branches    11
+1 slice, Cin/Cf=3       no tested GBW passes
+2 slices, Cin/Cf=1.5    300 MHz passes
+4 slices, Cin/Cf=0.75   300 MHz passes
+8 slices, Cin/Cf=0.375  100 MHz passes
 ```
 
-The next formal bridge then gave **each of the 112 physical edge sites its own
-independent 3%-sigma fabricated segmented codebook**.  On untouched bodies
-1700–1709:
+The smallest useful architectural change is two slices.
+
+## C1e3 — reuse one half-range bank — PASS
+
+`check_c1e3_self_reuse.py` asks whether two slices require duplicated physical
+self banks. They do not in the first-order deck.
+
+At 300 MHz:
 
 ```text
-fabricated monotonic tiles        10/10
-monotonic edge codebooks          112/112 on every tile
-learning DeltaC >= +0.10          10/10
-final exact > shuffled            10/10
-median DeltaC                    +0.581887
+TRANSFER1          20 ns
+RESET/RESAMPLE      5 ns   FAIL
+RESET/RESAMPLE     10 ns   PASS
+TRANSFER2          20 ns
 ```
 
-See `docs/CIRCUIT_C0D_MISMATCH_RESULT.md` and
-`docs/CIRCUIT_V05_SEGMENTED_MISMATCH_RESULT.md`.
-
-## Circuit-facing residual targets
-
-The current emulator/SPICE handoff in `docs/CIRCUIT_V05_SPICE_HANDOFF.md` uses:
+The 10 ns reset case gives about
 
 ```text
-A/B transfer mismatch       <= 1% RMS
-common settling loss        <= 30% at chosen aperture
-post-cal edge residual      ~ 0.1% RMS
-common kick residual        <= 7e-6 state FS RMS
-differential A/B kick       <= 3e-6 state FS RMS
-unit-cap mismatch target    <= 3% sigma with 4+3 segmentation
+packet magnitude error       0.0987%
+state-dependent mismatch     0.0233%
 ```
 
-## C0e — absolute scale — current work
+so v0.8 uses one `|self|<=1.5` bank twice.
 
-The SPICE decks above use convenient absolute capacitor values.  What has been
-validated is chiefly the ratio
+---
+
+# Thermal result feeding back into circuit architecture
+
+The strongest fresh v0.8 emulator gate includes both edge and self sampling
+kT/C with
 
 ```text
-Cunit/Csum = 0.001.
+b_edge = b_self = 1e-5
 ```
 
-C0e now measures how much normalized per-tick state noise the fully mismatched,
-calibrated machine can tolerate.  That boundary will be translated to candidate
-state capacitances using a first-order
+and passes 10/10 on fresh bodies 2300..2309.
+
+A controlled spent-body split then found:
 
 ```text
-sigma_V ~= sqrt(kT/Cstate)
+edge=2e-5, self=1e-5   PASS 10/10
+edge=1e-5, self=2e-5   FAIL 5/10
 ```
 
-budget for several possible state-voltage full scales.
+So the first sampled-cap thermal wall is **node-local self sampling**, not the
+reciprocal edge bank.
 
-Only after that should the convenient C0b/C0c capacitor values be replaced by a
-first realistic silicon size estimate.
+The v0.9 algebra/compiler audit explains why: for the present continuous-wave
+source class, the active-node self coefficient is about 1.994 because the
+second-order recurrence carries a universal near-2 inertial term. Subtracting
+`2I` in exact kick-drift coordinates leaves only about 0.00624 programmable
+active-node self while every edge coefficient remains unchanged.
+
+A first attempt to realize that near-2 term as an ordinary measured fixed-gain
+analog path was rejected by emulator diagnostics: static calibration works, but
+an added independent `1e-5 FS/tick` full-node noise source already creates a
+hard learning tail.
+
+Therefore the next C1 circuit question is **not** “build a quieter x2 amplifier.”
+It is whether the same two state banks can implement exact kick-drift shears
+structurally enough to avoid recreating a noisy wide self multiplier:
+
+```text
+P <- P + (Q-2I) Z + source
+Z <- Z + P
+```
+
+with terminal mirror
+
+```text
+Z <- Z-P
+P <- -P.
+```
+
+That candidate is still unqualified.
+
+---
+
+## Current circuit-facing targets
+
+```text
+edge nominal positive range                 0.265
+compiler required edge range                0.250
+edge unit mismatch model                    3% RMS
+site Cunit/Cstate mismatch model            1% RMS
+foreground switch-kick cancellation error   <=0.5% RMS
+common residual kick floor                  <=2e-6 state FS RMS
+differential residual kick floor            <=1e-6 state FS RMS
+active edge packet aperture                 20 ns class
+v0.8 reusable self path                     two x 20 ns transfers
+self bank reset/resample                    >=10 ns in C1e3 deck
+working first-order self OTA point           ~300 MHz
+```
+
+The branch should not translate normalized emulator thermal noise into a final
+MIM value until state voltage convention, topology noise factor and active-circuit noise are chosen explicitly.

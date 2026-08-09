@@ -1,0 +1,35 @@
+name: v09-partitioned-thermal-factorial
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
+      - 'experiments/v09_partitioned_thermal_factorial.py'
+      - 'docs/BENCHMARK_V09_THERMAL_FACTORIAL_PREREG.md'
+      - '.github/workflows/v09-partitioned-thermal-factorial.yml'
+  workflow_dispatch:
+
+jobs:
+  thermal:
+    strategy:
+      fail-fast: false
+      matrix:
+        condition: [none, edge, self, drift, edge_self, edge_drift, self_drift, all]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Verify partitioned RNG invariants
+        run: python -m unittest tests.test_v09_partitioned_rng -v
+      - name: Run one thermal-factor condition across five dynamic replicates
+        run: python experiments/v09_partitioned_thermal_factorial.py --condition ${{ matrix.condition }}
+      - name: Upload thermal-factor result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-thermal-factorial-${{ matrix.condition }}
+          path: v09-thermal-factorial-${{ matrix.condition }}.json

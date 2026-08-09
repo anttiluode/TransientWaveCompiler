@@ -1,0 +1,34 @@
+name: v10-forward-spsa-thermal
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
+      - 'experiments/v10_forward_spsa_clean.py'
+      - 'experiments/v10_forward_spsa_thermal.py'
+      - 'docs/BENCHMARK_V10_FORWARD_SPSA_THERMAL_PREREG.md'
+      - '.github/workflows/v10-forward-spsa-thermal.yml'
+  workflow_dispatch:
+
+jobs:
+  thermal:
+    strategy:
+      fail-fast: false
+      matrix:
+        dynamic_seed: [8000, 8001, 8002, 8003, 8004]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run one dynamic seed across three frozen SPSA direction sequences
+        run: python experiments/v10_forward_spsa_thermal.py --dynamic-seed ${{ matrix.dynamic_seed }}
+      - name: Upload thermal SPSA result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v10-forward-spsa-thermal-dyn${{ matrix.dynamic_seed }}
+          path: v10-forward-spsa-thermal-dyn*.json

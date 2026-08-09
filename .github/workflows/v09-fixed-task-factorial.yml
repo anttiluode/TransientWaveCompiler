@@ -8,7 +8,7 @@ on:
       - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
       - 'experiments/v09_fixed_task_factorial.py'
       - 'tests/test_v09_partitioned_rng.py'
-      - 'docs/BENCHMARK_V09_FIXED_TASK_FACTORIAL_PREREG.md'
+      - 'docs/BENCHMARK_V09_SEED_AXIS_FACTORIAL_PREREG.md'
       - '.github/workflows/v09-fixed-task-factorial.yml'
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fabrication_seed: [2400, 2401, 2402, 2403, 2404]
+        fabrication_seed: [2400, 3000, 3001, 3002, 3003]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
       - run: pip install -e .
       - name: Verify partitioned RNG invariants
         run: python -m unittest tests.test_v09_partitioned_rng -v
-      - name: Run one fabrication across five dynamic replicates
+      - name: Run one preregistered fabrication across five dynamic replicates
         run: python experiments/v09_fixed_task_factorial.py --fabrication-seed ${{ matrix.fabrication_seed }}
       - name: Upload factorial result
         uses: actions/upload-artifact@v4

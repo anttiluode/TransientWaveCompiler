@@ -1,0 +1,26 @@
+name: common-realization-drift-v01
+
+on:
+  push:
+    paths:
+      - "transientwave/common_realization.py"
+      - "transientwave/common_realization_drift_v01.py"
+      - "docs/COMMON_REALIZATION_DRIFT_PREREG_V01.md"
+      - ".github/workflows/common-realization-drift-v01.yml"
+  workflow_dispatch:
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.common_realization_drift_v01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: common-realization-drift-v01
+          path: runs/common_realization_drift_v01.json

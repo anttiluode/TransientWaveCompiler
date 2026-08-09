@@ -1,333 +1,282 @@
 # TransientWaveCompiler
 
-**A compiler and mixed-signal reference architecture for finite-time dissipative wave computation on an echo-trainable reciprocal mesh.**
+**A compiler/tuning toolkit for sparse reciprocal wave systems, plus a mixed-signal research architecture for transient-wave computation.**
 
-TransientWaveCompiler (TWC) grew out of the GeometricNeuronPlusField experiments. The engineering question is deliberately narrower than “analog neural hardware”:
+TransientWaveCompiler (TWC) grew out of the GeometricNeuronPlusField experiments. The repository now contains **two related but experimentally distinct projects**:
 
-> Can a finite-time dissipative reciprocal computation be compiled into reversible wave coordinates so that a physical mesh regenerates transient history and exposes local trainable credit without storing an `N x T` trajectory tape?
+1. **TWC compiler / reciprocal-system tuner** — compile, analyze and optimize sparse symmetric wave/filter operators on an ordinary computer.
+2. **TW-1A mixed-signal research backend** — explore whether a reciprocal switched-cap wave body can regenerate transient history and expose physical training credit without an `O(N*T)` stored trajectory tape.
 
-The project is a research architecture, **not a fabricated chip**. The repository now contains a compiler, circuit-native emulators, preregistered learning gates, process-independent ngspice bring-up tests and assumption-explicit area/timing budgets.
+The second project produced real circuit simplifications and ngspice results, but its attractive small-cap stochastic on-device gradient point is **not qualified** after controlled task × fabrication × dynamic-noise experiments. The first project is now the stronger application mainline.
+
+For the detailed hardware audit, start with:
+
+> **[`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md)**
 
 ---
 
-## Current architecture: TW-1A v0.8
+## Current headline: the compiler has escaped the toy benchmark
 
-The current fresh-qualified architecture is **v0.8 common/difference active summing**.
+The classical coupled-resonator filter formalism is built from the same kind of object TWC already understands well:
 
 ```text
-source dynamical program
+sparse reciprocal symmetric matrix
++ prescribed graph topology
++ local matrix parameters
++ measurable response
++ exact edge/knob derivatives
+```
+
+TWC now includes a separate, explicit coupling-matrix application layer rather than pretending microwave normalization and the TW transient recurrence are literally the same equation.
+
+### Published three-resonator filter — 5/5 exact recovery
+
+For the published target
+
+```text
+M = [[0,   .6, .2],
+     [.6,  0,  .6],
+     [.2, .6,  0 ]],
+```
+
+an exact inverse-matrix gradient was checked against central finite differences and then used to tune five deliberately detuned matrices.
+
+Result:
+
+```text
+5/5 response pass
+5/5 exact coupling recovery
+worst coupling-vector RMSE ~1.14e-4
+```
+
+See:
+
+- `transientwave/coupled_resonator_filter.py`
+- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_PREREG.md`
+- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_RESULT.md`
+
+### Resonator offsets + couplings — 5/5 exact six-knob recovery
+
+The same published target was then made into a more realistic matrix-level tuning problem:
+
+```text
+[d1, d2, d3, m12, m23, m13]
+```
+
+All three resonator self-detuning terms and all three couplings start wrong.
+
+Result:
+
+```text
+5/5 response pass
+5/5 six-knob recovery pass
+5/5 exact six-knob recovery
+worst overall parameter RMSE  0.009734
+worst detuning RMSE           0.013222
+worst coupling RMSE           0.003832
+```
+
+See:
+
+- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_PREREG.md`
+- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_RESULT.md`
+
+### Generalized source–resonator–load matrices
+
+The repository now also contains the proper explicit-port formulation
+
+```text
+A(Omega) = M + Omega U - j q
+S11      = 1 + 2j [A^-1]_(S,S)
+S21      = -2j [A^-1]_(L,S)
+```
+
+with audited exact gradients for arbitrary reciprocal matrix knobs:
+
+- `transientwave/generalized_coupling_matrix.py`
+- `tests/test_generalized_coupling_matrix.py`
+
+The current benchmark target is a published fourth-order cross-coupled tunable filter containing both resonator cross-coupling and direct source-load coupling, i.e. a topology designed around multiple transmission zeros.
+
+---
+
+## Why the filter application is a natural TWC target
+
+The transient compiler and a classical coupling-matrix tuner are not identical physical models. What they share is the structural core:
+
+```text
+parameterized sparse symmetric operator
         |
-        v
-scalar damping / conformal compile
-        |
-        v
+        +-- reciprocal local edge stamps
+        +-- topology constraints
+        +-- exact local matrix derivative
+        +-- forward response
+        `-- inverse / adjoint sensitivity
+```
+
+For an explicit matrix parameter `p`, the filter layer uses
+
+```text
+d A^-1 / dp = -A^-1 (dA/dp) A^-1.
+```
+
+A diagonal resonator tuning knob is a one-entry stamp. A reciprocal coupling is a symmetric two-entry stamp. The same compiler-side sparse-parameter machinery can therefore reason about both without hand-differentiating a whole filter.
+
+The practical next layers are measurement noise, actuator calibration, constrained topology, and larger published/real filters — not a fabrication run.
+
+---
+
+# TW-1A hardware research
+
+## Original question
+
+The hardware project asks whether a finite-time dissipative reciprocal computation can be lowered to wave coordinates so that a physical mesh regenerates enough transient history to train locally without storing the full trajectory:
+
+```text
+stored trajectory: O(N*T)
+physical echo:      O(N) live wave state + O(E) credit state
+```
+
+The compiled deterministic recurrence is of the form
+
+```text
 z[n+1] = Q z[n] - z[n-1] + u[n]
-        |
-        v
-8 x 8 TW-1A reciprocal mesh
-        |
-        +-- forward common field C
-        |
-        +-- structural time mirror / structural -PREV
-        |
-        +-- returned difference/adjoint field D
-        |
-        `-- local edge sensor forms DeltaC +/- DeltaD
-                                  |
-                                  v
-                         signed square difference
-                                  |
-                                  v
-                         one credit / trainable edge
 ```
 
-The live-memory target remains
-
-```text
-stored-trajectory implementation: O(N*T) state tape
-TW echo implementation:            O(N) live physical state
-                                  + O(E) scalar credit accumulators
-```
-
-### Four precision-heavy operations already removed structurally or rejected
-
-The branch has repeatedly used failed circuit/learning gates to simplify the architecture instead of merely tightening tolerances:
-
-1. **`-PREV` multiply/trim deleted.** The coefficient `-1` is a state-bank orientation/role invariant.
-2. **Terminal 64-node analog clone deleted.** Reverse coordinates are common/difference rather than stored `F+A` / `F-A` trajectories.
-3. **Matched `+error/-error` pair deleted.** One signed error waveform drives the D lane.
-4. **Passive NEXT charge sharing rejected.** C1b showed it is a first-order lag, not an additive accumulator; node updates use active virtual charge summing.
-
-The current reverse representation is
-
-```text
-C = F
-D = A
-```
-
-and only the local credit sensor reconstructs
-
-```text
-Delta_plus  = DeltaC + DeltaD
-Delta_minus = DeltaC - DeltaD
-
-credit = 1/4 * sum_t(Delta_plus^2 - Delta_minus^2)
-       = sum_t DeltaF * DeltaA.
-```
-
-No full internal trajectory is stored.
-
----
-
-## Physical operator
-
-The sparse symmetric recurrence operator is lowered as
+with a sparse symmetric physical operator
 
 ```text
 Q = diag(d) + sum_e a_e b_e b_e^T,
 b_e = e_i - e_j.
 ```
 
-For physical edge `(i,j)`:
+Each reciprocal edge is therefore one rank-one equal/opposite physical stamp rather than four independently matched matrix entries.
+
+## Structural circuit progress that survived
+
+The circuit branch repeatedly used failed gates to delete fragile operations:
+
+1. **Analog `-PREV` multiplier/trim deleted.** The `-1` history coefficient is structural through state-bank orientation.
+2. **Terminal analog clone deleted.** Reverse state moved to common/difference coordinates.
+3. **Matched positive/negative error DACs deleted.** One signed error waveform is enough.
+4. **Passive NEXT charge sharing rejected in ngspice.** It is state dependent; active virtual summing replaced it.
+5. **Monolithic `|self|=3` transfer rejected.** Two reusable half-range transfers satisfy the timing abstraction.
+6. **Kick-drift `(Z,P)` coordinates passed deterministic algebra and ngspice C1f shear tests.**
+
+The process-independent circuit ladder lives under `spice/`.
+
+## The important negative result
+
+The later v0.9 kick-drift rewrite made the known capacitor subtotal look dramatically better at a nominal common thermal base `b=2e-5`. That operating point did **not** survive a properly factored stochastic harness.
+
+Once task, fabricated silicon and dynamic noise were separated:
 
 ```text
-a_e = -Q_ij
-d_i = Q_ii - sum_(e incident i) a_e.
+fixed strongly learnable task 2400
+5 fabrication seeds
+5 dynamic seeds
+formal b=2e-5 point
+
+DeltaC >= +0.10    1/25
+exact > shuffled  16/25
 ```
 
-One reciprocal edge capacitor bank therefore produces the complete equal/opposite rank-one stamp. Four independently matched matrix entries are not required.
-
-Current edge target:
+A source factorial on fixed task/fabrication 2400 showed:
 
 ```text
-8 x 8 nodes                         64
-four-neighbor physical edges       112
-edge magnitude units / site        127
-selection                           4-bit binary + 3-bit thermometer
-nominal positive edge range        0.265
-compiler-required range            0.250
-unit-cap mismatch model            3% RMS
-site-common Cunit/Cstate model     1% RMS
-exact zero code                    yes
+thermal off                  median DeltaC +0.687113
+self thermal only            median DeltaC +0.149811
+edge thermal only            median DeltaC +0.019995
+drift thermal only           median DeltaC -0.014737
+all three                    median DeltaC +0.028717
 ```
 
-A measured monotonic physical codebook is part of the compiler/hardware contract; uniformly spaced analog levels are not required.
+The static/quantized fabricated body is therefore not the main failure. Sampled dynamic noise is.
+
+## Easy rescues were tested and rejected
+
+### Make the capacitors bigger
+
+A uniform thermal backoff swept all three sampled thermal bases together. Only `b=0` met the frozen robustness criterion. Even `b=2.5e-6` failed — despite implying 64× the capacitance of the attractive `b=2e-5` point.
+
+**Capacitor-only rescue rejected.**
+
+### Average more physical adjoints
+
+Complete physical gradients averaged per optimizer update:
+
+```text
+N=1    median DeltaC +0.028717
+N=4    median DeltaC -0.006610
+N=16   median DeltaC +0.080290
+N=64   median DeltaC +0.095307
+```
+
+Still not robust at 64× acquisition cost.
+
+### Forward-only perturbation
+
+The forward objective itself is highly trainable when dynamic thermal sampling is removed:
+
+```text
+clean SPSA median DeltaC          +0.446339
+clean 64-row Hadamard DeltaC      +0.839012
+```
+
+At `b=2e-5`, however:
+
+```text
+thermal SPSA              3/15 above +0.10
+64-row thermal Hadamard    2/5 above +0.10
+```
+
+The Hadamard estimator uses 256 forward traversals per optimizer update and still misses the frozen margin.
+
+## What the fixed-theta microscope says
+
+At one fixed theta, averaging **1024** noisy physical gradients still gives median:
+
+```text
+cosine to clean gradient        0.280
+projection onto clean gradient  0.191
+relative vector error           1.048
+relative trace standard error   0.521
+```
+
+So the small-cap physical gradient is not merely a mildly noisy unbiased vector. It has extreme variance and evidence of a bias component. A likely physical reason is that the reverse pass receives new thermal packets rather than the stochastic history that perturbed the particular forward trajectory it is supposed to adjoint.
+
+This does not invalidate deterministic echo mathematics. It limits the present **stochastic physical implementation** of that echo.
 
 ---
 
-## Strongest fresh emulator qualification
+## Current project split
 
-Fresh bodies **2300..2309** passed with both reciprocal-edge and node-local self sampling thermal noise enabled.
+### TWC compiler / tuner — mainline
 
-```text
-edge thermal base                         1e-5
-self thermal base                         1e-5
-edge nominal range                        0.265
-unit-cap mismatch                         3% RMS
-site-common ratio mismatch                1% RMS
-foreground kick-cancellation error        0.5% RMS
-residual kick floor                       2 ppm common / 1 ppm differential
-training iterations                       30
-step size                                 0.20
+Good current targets:
 
-fabrication                               10/10
-improvement >= +0.10                      10/10
-final exact > same-credit shuffled        10/10
-median DeltaC                             +0.396735
-minimum DeltaC                            +0.150625
-median placement gap                      +0.310108
-```
+- classical coupled-resonator filter synthesis/tuning;
+- measured resonator detuning and coupling correction;
+- mechanical/acoustic/metamaterial reciprocal systems;
+- any sparse symmetric linear wave model with a useful measured response and constrained topology.
 
-See `docs/CIRCUIT_V08_SELF_THERMAL_FRESH_RESULT.md` and `docs/HARDWARE_STATUS_V08_2026-08-09.md`.
+### TW-1A — research backend
 
-### Switch-kick target came from a real failure
+Worth preserving:
 
-A failed fresh body localized the remaining v0.8 tail to foreground cancellation accuracy, not the irreducible switch floor. The working target is
+- structural recurrence transformations;
+- reciprocal rank-one edge lowering;
+- active-summing switched-cap topology;
+- ngspice rejection/pass ladder;
+- kick-drift representation;
+- hardware-aware codebooks and calibration semantics;
+- controlled negative stochastic-learning results.
 
-```text
-kick-cancellation measurement error <= 0.5% RMS
-common residual floor               <= 2e-6 state FS RMS
-differential residual floor         <= 1e-6 state FS RMS
-```
+Not currently supported:
 
-Tightening the floor alone did not rescue the failed body; improving cancellation measurement did.
+> **a claim that the `b=2e-5` small-cap TW-1A is an economical general on-device gradient-learning accelerator.**
 
----
-
-## C1 circuit ladder
-
-The process-independent ngspice ladder is under `spice/`.
-
-```text
-C1b passive precharged-destination addition     REJECTED
-     state-dependent additivity error            ~50.000077%
-
-C1c active virtual-sum charge integration       PASS
-     nominal packet                              25.600 mV
-     packet state-dependence                     numerical floor
-
-C1d finite DC gain                              PASS / budgeted
-
-C1e monolithic |self|=3, 20 ns                  REJECTED
-     even 1 GHz misses frozen 0.1% packet marker
-
-C1e2 two self slices                            PASS
-     300 MHz, Cin/Cf=1.5 per slice
-
-C1e3 one half-range self bank reused twice      PASS
-     20 ns transfer
-     10 ns reset/resample
-     20 ns transfer
-     ~0.099% total packet magnitude error
-```
-
-The current v0.8 self implementation therefore uses one reusable `|self|<=1.5` bank twice instead of one monolithic `|self|<=3` packet.
-
----
-
-## Thermal result: the self sampler is the present wall
-
-The current active-integrator edge sampling law is
-
-```text
-sigma_edge / VFS = b_edge * sqrt(alpha),
-alpha = Cedge/Cstate.
-```
-
-The two-slice reusable self path has
-
-```text
-sigma_self / VFS = b_self * sqrt(|d|).
-```
-
-A controlled path split on the spent fresh bodies `2300..2309` found:
-
-```text
-edge=1e-5, self=1e-5     clean 10/10
-edge=2e-5, self=1e-5     clean 10/10
-edge=3e-5, self=1e-5     9/10   -> fail
-
-edge=1e-5, self=2e-5     5/10   -> fail
-edge=1e-5, self=3e-5     2/10   -> fail
-```
-
-So reciprocal edge sampling is **not** the first thermal bottleneck. Node-local self sampling is. See `docs/CIRCUIT_V08_THERMAL_PATH_SPLIT_RESULT.md`.
-
----
-
-## Area model
-
-The executable area model is assumption-explicit, not a foundry claim.
-
-Current v0.8 known provisioned capacitor subtotal:
-
-```text
-state banks       256.00 Cstate
-edge banks         29.68 Cstate
-self banks         96.00 Cstate
--------------------------------
-known subtotal    381.68 Cstate
-```
-
-This excludes OTA area/energy, credit detector/integrator, switches, dummy/calibration caps, reference distribution, control, clocks, routing and guard structures.
-
-Scalar thermal sizing:
-
-```text
-Cstate >= kT / (b * VFS)^2.
-```
-
-With deliberately illustrative `1 fF/um^2` MIM and `2.5 um^2/SRAM bit` assumptions:
-
-```text
-b=1e-5, VFS=1 V    known caps ~15.81 mm^2    tape crossover ~12,351 ticks
-b=3e-5, VFS=1 V    known caps ~ 1.76 mm^2    but this thermal point fails
-b=3e-5, VFS=2 V    known caps ~ 0.44 mm^2    but this thermal point fails
-```
-
-The combined edge+self outward sweep showed that even `2e-5` is not a passing common-noise point under v0.8. See `docs/CIRCUIT_V08_COMBINED_THERMAL_SWEEP_RESULT.md`.
-
----
-
-# v0.9 probe: remove the inertial +2 from the programmable self path
-
-**v0.9 is not qualified. It is the current architectural experiment.**
-
-For the compiled continuous-wave source class,
-
-```text
-Q = [(1+a)I - dt^2 H] / sqrt(a).
-```
-
-The local self term is dominated by the universal second-order inertial baseline. Define
-
-```text
-p[n] = z[n] - z[n-1]
-K = Q - 2I.
-```
-
-Then exactly
-
-```text
-p[n+1] = p[n] + K z[n] + u[n]
-z[n+1] = z[n] + p[n+1].
-```
-
-Unit tests verify one-step, 100-step and inverse equivalence, and subtracting `2I` leaves every edge/rank-one derivative unchanged.
-
-On all spent `2300..2309` benchmark bodies:
-
-```text
-old active-node programmable self |d|     1.993759520
-kick residual |d-2|                       0.006240480
-magnitude reduction                       319.49x
-sampled-self noise-amplitude reduction     17.87x
-```
-
-The first v0.9 circuit abstraction therefore keeps the proven v0.8 state/echo representation but splits
-
-```text
-d_i = fixed_measured_inertial_gain_i + programmable_residual_i.
-```
-
-Static fixed-path mismatch is measured and absorbed by the residual code. Dynamic noise of the fixed near-2 path is **explicitly swept**; it is not assumed free.
-
-Provisional residual-self range:
-
-```text
-+/-0.125, 10 signed bits
-```
-
-which would reduce the self capacitor provision from `96 Cstate` to `8 Cstate` if a practical fixed inertial circuit earns the required noise/area/energy point.
-
-See `transientwave/kick_drift.py`, `docs/CIRCUIT_V09_KICK_SELF_AUDIT_RESULT.md` and `docs/CIRCUIT_V09_INERTIAL_BASELINE_PREREG.md`.
-
----
-
-## Compiler path
-
-The compiler currently:
-
-1. accepts a narrow reciprocal finite-time dynamical program;
-2. lowers supported continuous damped waves to a second-order recurrence;
-3. applies the scalar damping/conformal gauge;
-4. checks reversibility/stability;
-5. routes sparse symmetric couplings onto the 8x8 physical mesh;
-6. emits reciprocal rank-one edge semantics and converter/calibration requirements;
-7. emits objective/error schedules and hardware contract metadata.
-
-For uniform source damping,
-
-```text
-a = 1 - dt*gamma
-r = sqrt(a)
-psi[n] = r^n z[n]
-Q = M/r
-```
-
-so intended uniform dissipation is moved into source/readout envelopes rather than requiring the physical echo to reverse loss.
-
-The compiler remains conservative: unsupported topology/range/reciprocity is rejected rather than silently approximated.
+A future chip path would need a genuinely different physical estimator or a use case that does not require fast in-situ stochastic gradient recovery.
 
 ---
 
@@ -338,39 +287,49 @@ transientwave/
   compiler.py
   physical.py
   backend.py
-  circuit_architecture.py
-  active_summing_budget.py
+
+  # circuit research
   circuit_emulator_v08_common_diff.py
-  circuit_emulator_v08_self_thermal.py
-  circuit_emulator_v09_inertial_baseline.py
+  circuit_emulator_v09_partitioned_rng.py
+  circuit_emulator_v09_kick_drift.py
   kick_drift.py
 
+  # filter / reciprocal-system application layer
+  coupled_resonator_filter.py
+  generalized_coupling_matrix.py
+
+experiments/
+  v09_*.py
+  v10_*.py
+  published_coupled_filter_v01.py
+  published_coupled_filter_v02.py
+  published_cross_coupled_filter_v03.py
+
 spice/
-  README.md
   check_c1b_passive_additivity.py
   check_c1c_virtual_sum.py
   check_c1d_finite_gain.py
   check_c1e_finite_bandwidth.py
   check_c1e2_self_slicing.py
   check_c1e3_self_reuse.py
+  check_c1f_kick_drift_shear.py
 
 docs/
-  HARDWARE_STATUS_V08_2026-08-09.md
-  CIRCUIT_V08_SELF_THERMAL_FRESH_RESULT.md
-  CIRCUIT_V08_COMBINED_THERMAL_SWEEP_RESULT.md
-  CIRCUIT_V08_THERMAL_PATH_SPLIT_RESULT.md
-  CIRCUIT_V09_KICK_SELF_AUDIT_RESULT.md
-  COST_MODEL.md
+  HARDWARE_STATUS_2026-08-09.md
+  BENCHMARK_V09_*_RESULT.md
+  BENCHMARK_V10_*_RESULT.md
+  BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_RESULT.md
+  BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_RESULT.md
 ```
 
-Failed preregistered gates are intentionally retained. They have repeatedly been more useful than a smooth success narrative because they identified which physical assumption should be deleted or redesigned.
+Failed preregistered gates are intentionally retained. In this repository they are part of the design record, not clutter: most of the useful architecture came from identifying which assumption should be deleted rather than tightening every tolerance.
 
 ---
 
 ## Prior-art boundary
 
-This repository does **not** claim invention of adjoint optimization, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor/damping transforms, physical wave computing or trainable scattering media.
+This repository does **not** claim invention of adjoint optimization, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor damping transforms, physical wave computing, trainable scattering media, or classical microwave coupling-matrix synthesis.
 
-The narrower research question remains:
+The narrower contribution being explored is the compiler/engineering combination:
 
-> Can useful finite-time dissipative reciprocal computations be compiled into stable echo-compatible wave coordinates so that a physically local mesh regenerates transient history and exposes broadband local credit without an `O(N*T)` stored trajectory?
+> **Represent trainable reciprocal systems as constrained sparse symmetric operators, lower them into physically meaningful local parameters, preserve exact sensitivity structure, and make the assumptions/failure boundaries explicit enough that the same compiler can target both simulated tuning problems and future physical backends.**

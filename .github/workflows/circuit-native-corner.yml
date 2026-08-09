@@ -1,0 +1,24 @@
+name: circuit-native-corner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  corner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run preregistered simultaneous circuit corner
+        run: python experiments/circuit_native_corner_v01.py
+      - name: Upload corner result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-native-corner-v01
+          path: circuit-native-corner-v01.json
+          if-no-files-found: warn

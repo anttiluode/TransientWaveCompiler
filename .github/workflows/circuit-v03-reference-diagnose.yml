@@ -1,0 +1,24 @@
+name: circuit-v03-reference-diagnose
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Audit clean v0.3 reference
+        run: python experiments/circuit_v03_reference_diagnose.py
+      - name: Upload reference diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v03-reference-diagnose
+          path: circuit-v03-reference-diagnose.json
+          if-no-files-found: warn

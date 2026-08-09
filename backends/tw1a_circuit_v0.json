@@ -1,0 +1,71 @@
+{
+  "architecture": "tw1a-sc-lockstep-v0.2",
+  "rows": 8,
+  "cols": 8,
+  "nodes": 64,
+  "physical_edges": 112,
+  "ports": 8,
+  "wave_lanes": 2,
+  "temporal_state_banks_per_lane": 2,
+  "differential_state_registers": 256,
+  "minimum_scalar_state_sample_caps": 512,
+  "edge_path": {
+    "bits": 8,
+    "full_scale": 0.25,
+    "quantizer": "signed_midtread_zero_preserving",
+    "cell": "shared_switched_cap_rank1_multiply",
+    "reuse": "same physical MDAC for lane A then lane B within one wave tick"
+  },
+  "self_path": {
+    "bits": 12,
+    "full_scale": 3.0,
+    "derived_minimum_full_scale": 2.95,
+    "reason": "Q_ii residual after degree-4 rank-one edge stamps",
+    "precision_rule": "self LSB no coarser than 8-bit +/-0.25 edge LSB"
+  },
+  "port_path": {
+    "drive_dac_bits": 8,
+    "error_dac_bits": 10,
+    "sense_adc_bits": 8,
+    "static_sense_pga": true,
+    "reverse_error": "one magnitude sample with opposite sign routing to lanes A/B"
+  },
+  "credit_path": {
+    "local_accumulators_max": 112,
+    "credit_adc_bits": 10,
+    "measurement": "same-element signed square integration",
+    "equation": "1/4 sum((Delta z_plus)^2-(Delta z_minus)^2)",
+    "storage": "one signed local accumulator per trainable edge"
+  },
+  "coherence": {
+    "parameter_write_lock": "PARAM_HOLD",
+    "scope": "first objective forward through final objective reverse pair",
+    "mirror": "pointer swap of current/previous state-bank roles",
+    "terminal_clone": "copy lane-A terminal current/previous into lane B",
+    "plus_minus": "lockstep dual-context reverse under one held operator",
+    "qualification": "architecture hypothesis pending circuit-level emulator/SPICE/board"
+  },
+  "timing": {
+    "reverse_tick_microphases": [
+      "PHI0_PRECHARGE_AND_AUTOZERO",
+      "PHI1_LANE_A_SAMPLE_EDGE_DIFFERENCES",
+      "PHI2_LANE_A_TRANSFER_EDGE_AND_SELF_CHARGE",
+      "PHI3_LCC_ADD_PLUS_SQUARE",
+      "PHI4_LANE_B_SAMPLE_EDGE_DIFFERENCES",
+      "PHI5_LANE_B_TRANSFER_EDGE_AND_SELF_CHARGE",
+      "PHI6_LCC_SUBTRACT_MINUS_SQUARE",
+      "PHI7_COMMIT_BOTH_LANES"
+    ],
+    "traversals_per_objective_term": 2,
+    "bringup_clock_hz": 1000000.0
+  },
+  "retention": {
+    "recommended_leakage_per_tick": 0.001,
+    "equivalent_tau_seconds_at_bringup_clock": 0.0009994999166249735
+  },
+  "docs": [
+    "docs/CIRCUIT_ARCHITECTURE_V01.md",
+    "docs/CIRCUIT_BRINGUP_V01.md",
+    "docs/HARDWARE_STATUS_2026-08-09.md"
+  ]
+}

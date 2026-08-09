@@ -143,6 +143,42 @@ The important caveat is that the 10-ppm number is a **within-gradient differenti
 
 See [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current evidence map and exact caveats.
 
+## Circuit architecture: TW-1A v0.2 lockstep reverse
+
+The first circuit-level answer to that coherence problem is now specified in [`docs/CIRCUIT_ARCHITECTURE_V01.md`](docs/CIRCUIT_ARCHITECTURE_V01.md).
+
+Rather than running PLUS and MINUS as two long independent reverse passes and requiring the analog mesh to remain nearly identical between them, TW-1A v0.2 carries **two reverse state contexts** but routes both through the **same physical edge MDAC and the same local square/integrate credit path inside each wave tick**:
+
+```text
+forward lane A
+    |
+terminal clone -> lane B
+    |
+pointer-swap mirror both lanes
+    |
+    +--> lane A: F + A --+
+    |                    | same held edge MDAC
+    +--> lane B: F - A --+ reused in adjacent subphases
+                         |
+                         v
+                same local square/LCC
+             +square(PLUS), -square(MINUS)
+                         |
+                    signed credit
+```
+
+The design also makes the physical `Q` representation explicit:
+
+```text
+Q = diag(d) + sum_e a_e (e_i-e_j)(e_i-e_j)^T.
+```
+
+That decomposition exposed a previously hidden circuit requirement. With the backend's `|Q_ii|<=1.95`, `|Q_ij|<=0.25` and grid degree four, the local self path must cover at least **+/-2.95** after the rank-one edge diagonal stamps are included. The reference circuit therefore uses a **+/-3.0, 12-bit self MDAC** so its absolute LSB is no coarser than the current 8-bit edge path.
+
+The lockstep design reduces the T-length training cost from roughly four traversals per objective term (`forward -> reverse+ -> recreate -> reverse-`) to two (`forward -> simultaneous reverse pair`) and converts the most dangerous PLUS/MINUS drift into a same-element adjacent-subphase residual that can now be measured directly.
+
+See [`docs/CIRCUIT_BRINGUP_V01.md`](docs/CIRCUIT_BRINGUP_V01.md) for the edge-cell, second-order recurrence, terminal-clone, local-credit and small-tile kill gates.
+
 ## Repository layout
 
 ```text
@@ -150,8 +186,13 @@ docs/
   ARCHITECTURE.md                 TW-1 machine architecture
   COMPILER_IR.md                  WaveProgram intermediate representation
   TRAINING_PROTOCOL.md            echo/adjoint training sequence
-  HARDWARE_TILE.md                node, edge, port and local-credit circuits
+  HARDWARE_TILE.md                node, edge, port and local-credit concepts
   HARDWARE_STATUS_2026-08-09.md   current mixed-signal evidence and limits
+  CIRCUIT_ARCHITECTURE_V01.md     TW-1A v0.2 switched-cap/lockstep circuit
+  CIRCUIT_BRINGUP_V01.md          circuit bring-up and kill gates
+
+backends/
+  tw1a_circuit_v0.json            machine-readable circuit profile
 
 transientwave/
   ir.py                           typed compiler IR
@@ -159,6 +200,7 @@ transientwave/
   backend.py                      strict 8x8 TW-1A physical backend
   physical.py                     TW-1A lowering/routing + hardware contract
   hardware_contract.py            dynamic-range and hardware-profile report
+  circuit_architecture.py         rank-one circuit decomposition/resources/timing
   emulator_v05.py                 rank-one edge-cell mixed-signal emulator
   cli.py                          command-line compiler
 
@@ -169,6 +211,7 @@ tests/
   test_compiler.py                algebra and rejection tests
   test_hardware_contract.py       converter-budget and contract tests
   test_emulator_v05.py            rank-one edge-cell hardware semantics
+  test_circuit_architecture.py    circuit decomposition/coherence invariants
 ```
 
 ## Prior-art boundary
@@ -189,8 +232,8 @@ The research question is narrower:
 
 ## Status
 
-`v0.1` is a **reference architecture and executable algebraic compiler**, not a fabricated chip. The compiler algebra, strict 8x8 backend, microcode, rank-one mixed-signal emulator, temporal-order credit benchmark, and hardware-contract reporting are executable and covered by CI.
+`v0.1` is a **reference architecture and executable algebraic compiler**, not a fabricated chip. The compiler algebra, strict 8x8 backend, microcode, rank-one mixed-signal emulator, temporal-order credit benchmark, hardware-contract reporting and process-independent v0.2 circuit architecture are executable or machine-readable and covered by tests where appropriate.
 
-The next hardware question is no longer simply "how many bits?" The current results say the critical acquisition requirement is that all measurements combined into one physical gradient refer to a sufficiently coherent reciprocal operator realization. A practical chopped/simultaneous differential implementation of that coherence requirement remains an engineering target.
+The next hardware question is now concrete: **does same-element lockstep A/B reuse actually collapse differential operator/credit error enough once edge-settling, charge injection, terminal-clone error, history-ratio error, LCC curvature and clock feedthrough are modeled as circuits rather than generic pass noise?**
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the machine spec and [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current hardware evidence.
+See [`docs/CIRCUIT_ARCHITECTURE_V01.md`](docs/CIRCUIT_ARCHITECTURE_V01.md), [`docs/CIRCUIT_BRINGUP_V01.md`](docs/CIRCUIT_BRINGUP_V01.md), and [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current hardware path.

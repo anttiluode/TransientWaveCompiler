@@ -1,0 +1,24 @@
+name: circuit-v03-diagnose
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Diagnose failed v0.3 corner
+        run: python experiments/circuit_v03_corner_diagnose.py
+      - name: Upload v0.3 diagnostic result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v03-corner-diagnose
+          path: circuit-v03-corner-diagnose.json
+          if-no-files-found: warn

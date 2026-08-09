@@ -1,0 +1,24 @@
+name: circuit-v03-corner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  corner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run preregistered v0.3 simultaneous corner
+        run: python experiments/circuit_v03_corner.py
+      - name: Upload v0.3 corner result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v03-corner
+          path: circuit-v03-corner.json
+          if-no-files-found: warn

@@ -1,0 +1,36 @@
+name: v09-thermal-gradient-averaging
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
+      - 'experiments/v09_thermal_gradient_averaging.py'
+      - 'docs/BENCHMARK_V09_THERMAL_GRADIENT_AVERAGING_PREREG.md'
+      - 'tests/test_v09_partitioned_rng.py'
+      - '.github/workflows/v09-thermal-gradient-averaging.yml'
+  workflow_dispatch:
+
+jobs:
+  average:
+    strategy:
+      fail-fast: false
+      matrix:
+        repeats: [1, 4, 16, 64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Verify partitioned RNG invariants
+        run: python -m unittest tests.test_v09_partitioned_rng -v
+      - name: Average complete physical gradient acquisitions
+        run: python experiments/v09_thermal_gradient_averaging.py --repeats ${{ matrix.repeats }}
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-thermal-gradient-avg-n${{ matrix.repeats }}
+          path: v09-thermal-gradient-avg-n*.json

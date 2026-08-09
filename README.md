@@ -120,25 +120,55 @@ TWC compiles a `WaveProgram` through these stages:
 
 The compiler refuses designs that violate hard backend constraints instead of silently producing an unstable body.
 
+Strict `twc-tw1a` output now also carries a machine-readable `hardware_contract` block. The current physical semantics are **one reciprocal rank-one edge cell / one programmable coefficient / one local credit accumulator**, with an exact zero/off code. The block distinguishes per-program converter spans from the architecture-wide damping-gauge promise and records the current mixed-signal evidence without turning benchmark results into hard universal compile errors.
+
+## Current mixed-signal result
+
+The first fully preregistered simultaneous noisy operating point has now passed on ten untouched irregular temporal-order tasks using the corrected rank-one edge-cell emulator:
+
+```text
+Q / drive DAC / sense ADC     8 / 8 / 8
+mean leakage per tick          0.0005
+leakage CV                     0.50
+mirror gain error              15%
+PLUS/MINUS differential drift  10 ppm RMS
+zero-mean local credit noise   25%
+local credit DC offset         0.015%
+state noise                    5e-9 of full scale RMS/tick
+```
+
+All 10/10 learners improved by at least +0.10 normalized temporal-order contrast and all 10/10 beat a norm-matched shuffled-credit control.
+
+The important caveat is that the 10-ppm number is a **within-gradient differential-stability** result, not necessarily an absolute fabrication-accuracy limit. Experiments in which one drifting reciprocal Q is held coherent across the complete physical gradient evaluation are far more tolerant of absolute Q variation, but an absolute coherent-drift boundary is not yet confirmed.
+
+See [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current evidence map and exact caveats.
+
 ## Repository layout
 
 ```text
 docs/
-  ARCHITECTURE.md       TW-1 machine architecture
-  COMPILER_IR.md        WaveProgram intermediate representation
-  TRAINING_PROTOCOL.md  echo/adjoint training sequence
-  HARDWARE_TILE.md      node, edge, port and local-credit circuits
+  ARCHITECTURE.md                 TW-1 machine architecture
+  COMPILER_IR.md                  WaveProgram intermediate representation
+  TRAINING_PROTOCOL.md            echo/adjoint training sequence
+  HARDWARE_TILE.md                node, edge, port and local-credit circuits
+  HARDWARE_STATUS_2026-08-09.md   current mixed-signal evidence and limits
 
 transientwave/
-  ir.py                 typed compiler IR
-  compiler.py           damped -> reversible compilation
-  cli.py                command-line compiler
+  ir.py                           typed compiler IR
+  compiler.py                     damped -> reversible compilation
+  backend.py                      strict 8x8 TW-1A physical backend
+  physical.py                     TW-1A lowering/routing + hardware contract
+  hardware_contract.py            dynamic-range and hardware-profile report
+  emulator_v05.py                 rank-one edge-cell mixed-signal emulator
+  cli.py                          command-line compiler
 
 examples/
-  three_node.json       minimal compilable wave program
+  three_node.json                 minimal compilable wave program
 
 tests/
-  test_compiler.py      algebra and rejection tests
+  test_compiler.py                algebra and rejection tests
+  test_hardware_contract.py       converter-budget and contract tests
+  test_emulator_v05.py            rank-one edge-cell hardware semantics
 ```
 
 ## Prior-art boundary
@@ -159,12 +189,8 @@ The research question is narrower:
 
 ## Status
 
-`v0.1` is a **reference architecture and executable algebraic compiler**, not a fabricated chip. The immediate success criteria are:
+`v0.1` is a **reference architecture and executable algebraic compiler**, not a fabricated chip. The compiler algebra, strict 8x8 backend, microcode, rank-one mixed-signal emulator, temporal-order credit benchmark, and hardware-contract reporting are executable and covered by CI.
 
-- exact numerical equivalence between source program and compiled program;
-- correct compiler rejection of illegal damping/nonreciprocity/stability cases;
-- exact gradient reconstruction in the ideal backend;
-- graceful degradation under calibrated hardware errors;
-- a concrete pass/area/energy model before making speed or efficiency claims.
+The next hardware question is no longer simply "how many bits?" The current results say the critical acquisition requirement is that all measurements combined into one physical gradient refer to a sufficiently coherent reciprocal operator realization. A practical chopped/simultaneous differential implementation of that coherence requirement remains an engineering target.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the machine spec.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the machine spec and [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current hardware evidence.

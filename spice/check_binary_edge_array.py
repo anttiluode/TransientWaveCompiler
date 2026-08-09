@@ -8,7 +8,7 @@ seven programmable branches are physically disconnected by their switches.
 The positive-code sweep is exhaustive (0..127). Representative negative codes
 reuse the same magnitude selection with the transfer polarity crossbar reversed.
 
-C0c is intentionally a *topology/static charge-sharing* gate.  C0a already tests
+C0c is intentionally a *topology/static charge-sharing* gate. C0a already tests
 finite settling and phase history, so the C0c sample/transfer apertures are made
 long enough that RC settling is negligible compared with the array checks.
 """
@@ -40,16 +40,15 @@ def deck_for(code: int) -> str:
         ".option numdgt=12",
         "VSTATEI vi 0 0.2",
         "VSTATEJ vj 0 -0.2",
-        # Long static apertures intentionally decouple this topology test from
-        # the finite-settling timing problem already covered by C0a.
         "VRESET rst 0 PWL(0n 1 1.00n 1 1.10n 0 130n 0)",
         "VSAMPLE samp 0 PWL(0n 0 1.90n 0 2.00n 1 22.00n 1 22.10n 0 130n 0)",
         "VXFER xfer 0 PWL(0n 0 24.90n 0 25.00n 1 125.00n 1 125.10n 0 130n 0)",
         "VOFF offctl 0 0",
-        # Millisecond off/leak RC versus a 130 ns experiment anchors disabled
-        # branches without materially moving their stored charge.
-        ".model ESW SW(Ron=10 Roff=1e9 Vt=0.5 Vh=0)",
-        ".model RSW SW(Ron=1 Roff=1e9 Vt=0.5 Vh=0)",
+        # Keep the explicit branch anchors at 1e9 ohm for conditioning, but the
+        # programmable switches themselves are much more isolated when off.
+        # Thus the numerical DC anchor does not become the zero-code signal path.
+        ".model ESW SW(Ron=10 Roff=1e12 Vt=0.5 Vh=0)",
+        ".model RSW SW(Ron=1 Roff=1e12 Vt=0.5 Vh=0)",
         "CSUMI sumi 0 1n",
         "CSUMJ sumj 0 1n",
         "RSUMI sumi 0 1e9",
@@ -150,7 +149,7 @@ def main() -> None:
         exp = expected_diff(code)
         max_common = max(max_common, abs(r["common"]))
         if code == 0:
-            if abs(r["diff"]) > 2e-8:
+            if abs(r["diff"]) > 2e-9:
                 raise SystemExit(f"zero code leaks transfer: {r['diff']}")
             continue
         if r["diff"] <= previous:

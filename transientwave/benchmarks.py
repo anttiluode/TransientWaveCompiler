@@ -80,19 +80,36 @@ def irregular_arbor_program_dict(
     onsite: float = 1.0,
     edge_stiffness: float = 10.0,
     drive_amplitude: float = 6.0,
+    parked_onsite: float = 10.0,
 ) -> dict[str, Any]:
-    """Create the preregistered 40-cell irregular arbor task family."""
+    """Create the preregistered 40-cell irregular arbor task family.
+
+    Inactive physical cells are isolated and given a stronger onsite term only
+    to park their otherwise-unused recurrence inside the TW-1A diagonal range.
+    The active 40-cell arbor retains the preregistered onsite value.
+    """
     active, edges = _grow_tree(seed, active_nodes)
+    active_set = set(active)
     dist = _distances(0, edges, active)
     output = max(active, key=lambda i: (dist[i], i))
 
-    H = np.eye(NODES, dtype=float) * float(onsite)
+    H = np.eye(NODES, dtype=float) * float(parked_onsite)
+    for i in active:
+        H[i, i] = float(onsite)
     for i, j in edges:
         k = float(edge_stiffness)
         H[i, i] += k
         H[j, j] += k
         H[i, j] -= k
         H[j, i] -= k
+
+    # Sanity: parked cells are completely disconnected from the active arbor.
+    for i in range(NODES):
+        if i not in active_set:
+            H[i, :i] = 0.0
+            H[i, i + 1 :] = 0.0
+            H[:i, i] = 0.0
+            H[i + 1 :, i] = 0.0
 
     rng = np.random.default_rng(seed + 99173)
     half = steps // 2
@@ -162,6 +179,8 @@ def irregular_arbor_program_dict(
             "active_cells": active,
             "tree_edges": [list(e) for e in edges],
             "output_graph_distance": int(dist[output]),
+            "active_onsite": float(onsite),
+            "parked_onsite": float(parked_onsite),
         },
     }
 

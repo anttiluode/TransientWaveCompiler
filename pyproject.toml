@@ -12,6 +12,7 @@ dependencies = ["numpy>=1.26"]
 [project.scripts]
 twc = "transientwave.cli:main"
 twc-tw1a = "transientwave.hw_cli:main"
+twc-hw = "transientwave.hardware_report_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

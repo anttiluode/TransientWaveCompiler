@@ -1,0 +1,24 @@
+name: spice-c1e3-self-reuse
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'spice/check_c1e3_self_reuse.py'
+      - 'docs/CIRCUIT_C1E3_SELF_REUSE_PREREG.md'
+      - '.github/workflows/spice-c1e3-self-reuse.yml'
+  workflow_dispatch:
+
+jobs:
+  c1e3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+      - name: Run C1e3 reusable self-bank reset study
+        run: python3 spice/check_c1e3_self_reuse.py

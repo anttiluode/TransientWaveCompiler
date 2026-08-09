@@ -1,0 +1,30 @@
+name: circuit-v07-active-summing
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'transientwave/circuit_emulator_v07_active_summing.py'
+      - 'experiments/circuit_v07_active_summing_corner.py'
+      - 'docs/CIRCUIT_V07_ACTIVE_SUMMING_PREREG.md'
+      - '.github/workflows/circuit-v07-active-summing.yml'
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run preregistered fresh v0.7 active-summing gate
+        run: python experiments/circuit_v07_active_summing_corner.py
+      - name: Upload v0.7 formal result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v07-active-summing
+          path: circuit-v07-active-summing-corner.json

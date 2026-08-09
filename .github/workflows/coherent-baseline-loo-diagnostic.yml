@@ -1,0 +1,25 @@
+name: coherent-baseline-loo-diagnostic
+
+on:
+  push:
+    paths:
+      - "transientwave/coherent_baseline_loo_diagnostic.py"
+      - "transientwave/full_update_coherent.py"
+      - ".github/workflows/coherent-baseline-loo-diagnostic.yml"
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.coherent_baseline_loo_diagnostic
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coherent-baseline-loo-diagnostic
+          path: runs/coherent_baseline_loo_diagnostic.json

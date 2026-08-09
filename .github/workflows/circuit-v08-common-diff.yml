@@ -1,0 +1,31 @@
+name: circuit-v08-common-diff
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v08_common_diff.py'
+      - 'transientwave/circuit_emulator_v08_site_ratio.py'
+      - 'experiments/circuit_v08_common_diff_corner.py'
+      - 'docs/CIRCUIT_V08_COMMON_DIFF_PREREG.md'
+      - '.github/workflows/circuit-v08-common-diff.yml'
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run preregistered fresh v0.8 common-difference gate
+        run: python experiments/circuit_v08_common_diff_corner.py
+      - name: Upload v0.8 formal result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v08-common-diff
+          path: circuit-v08-common-diff-corner.json

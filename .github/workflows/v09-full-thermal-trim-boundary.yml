@@ -1,0 +1,32 @@
+name: v09-full-thermal-trim-boundary
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_full_thermal_trim_boundary.py'
+      - 'docs/CIRCUIT_V09_FULL_THERMAL_TRIM_BOUNDARY_PREREG.md'
+      - '.github/workflows/v09-full-thermal-trim-boundary.yml'
+  workflow_dispatch:
+
+jobs:
+  boundary:
+    strategy:
+      fail-fast: false
+      matrix:
+        label: [s000, s025, s050, s075, s100, s150, s250]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen full-thermal residual point
+        run: python experiments/v09_full_thermal_trim_boundary.py --label ${{ matrix.label }}
+      - name: Upload point result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-full-thermal-trim-${{ matrix.label }}
+          path: v09-full-thermal-trim-${{ matrix.label }}.json

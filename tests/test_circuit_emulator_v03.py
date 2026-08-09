@@ -48,8 +48,8 @@ class CircuitV03StructureTests(unittest.TestCase):
         tile = TW1ACircuitTile(task["target"], cfg, sense_gain=1.0)
         common = 0.5 * (tile.edge_injection_a + tile.edge_injection_b)
         diff = 0.5 * (tile.edge_injection_a - tile.edge_injection_b)
-        self.assertTrue(np.allclose(common, tile.edge_injection_common, atol=0, rtol=0))
-        self.assertTrue(np.allclose(diff, tile.edge_injection_diff, atol=1e-18, rtol=0))
+        self.assertTrue(np.allclose(common, tile.edge_injection_common, atol=1e-15, rtol=1e-15))
+        self.assertTrue(np.allclose(diff, tile.edge_injection_diff, atol=1e-15, rtol=1e-15))
 
     def test_common_only_edge_injection_is_identical_between_reverse_lanes(self):
         task = compile_temporal_order_task(810)

@@ -1,0 +1,44 @@
+name: v10-forward-hadamard-thermal
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v10_forward_hadamard_thermal.py'
+      - 'docs/BENCHMARK_V10_FORWARD_HADAMARD_THERMAL_PREREG.md'
+      - '.github/workflows/v10-forward-hadamard-thermal.yml'
+  workflow_dispatch:
+
+jobs:
+  hadamard:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: clean
+            dynamic_seed: 8000
+          - mode: thermal
+            dynamic_seed: 8000
+          - mode: thermal
+            dynamic_seed: 8001
+          - mode: thermal
+            dynamic_seed: 8002
+          - mode: thermal
+            dynamic_seed: 8003
+          - mode: thermal
+            dynamic_seed: 8004
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run full 64-direction forward estimator
+        run: python experiments/v10_forward_hadamard_thermal.py --mode ${{ matrix.mode }} --dynamic-seed ${{ matrix.dynamic_seed }}
+      - name: Upload Hadamard result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v10-forward-hadamard-${{ matrix.mode }}-dyn${{ matrix.dynamic_seed }}
+          path: v10-forward-hadamard-*.json

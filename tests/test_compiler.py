@@ -16,8 +16,12 @@ class CompilerTests(unittest.TestCase):
     def load_example(self):
         return program_from_dict(json.loads((ROOT / "examples" / "three_node.json").read_text()))
 
-    def test_damping_gauge_reconstructs_source_trajectory(self):
-        p = self.load_example()
+    def load_continuous_example(self):
+        return program_from_dict(
+            json.loads((ROOT / "examples" / "continuous_three_node.json").read_text())
+        )
+
+    def assert_source_compiled_equivalent(self, p, tol=2e-9):
         man = compile_program(p)
         x = simulate_source(p)
         z = simulate_compiled(p, man)
@@ -25,7 +29,27 @@ class CompilerTests(unittest.TestCase):
         scale = r ** np.arange(len(z), dtype=float)
         reconstructed = z * scale[:, None]
         rel = np.linalg.norm(reconstructed - x) / (np.linalg.norm(x) + 1e-30)
-        self.assertLess(rel, 2e-9)
+        self.assertLess(rel, tol)
+
+    def test_damping_gauge_reconstructs_source_trajectory(self):
+        self.assert_source_compiled_equivalent(self.load_example())
+
+    def test_continuous_wave_lowering_reconstructs_discretized_source(self):
+        p = self.load_continuous_example()
+        man = compile_program(p)
+        self.assertEqual(man["source_lowering"]["kind"], "continuous_damped_wave")
+        self.assertAlmostEqual(man["source_lowering"]["a"], 0.99)
+        self.assertAlmostEqual(man["source_lowering"]["drive_scale"], 0.05**2)
+        self.assert_source_compiled_equivalent(p)
+
+    def test_continuous_stiffness_edge_gets_correct_credit_scale(self):
+        p = self.load_continuous_example()
+        man = compile_program(p)
+        r = man["gauge"]["r"]
+        edge = man["trainable_edges"][0]
+        self.assertEqual(edge["parameter_space"], "stiffness_H")
+        self.assertAlmostEqual(edge["source_matrix_scale"], -(p.dt**2), places=14)
+        self.assertAlmostEqual(edge["compiled_credit_scale"], -(p.dt**2) / r, places=14)
 
     def test_previous_state_transform_is_exact(self):
         d = json.loads((ROOT / "examples" / "three_node.json").read_text())
@@ -44,6 +68,13 @@ class CompilerTests(unittest.TestCase):
     def test_nonreciprocal_operator_is_rejected(self):
         d = json.loads((ROOT / "examples" / "three_node.json").read_text())
         d["dynamics"]["M"][0][1] += 0.01
+        with self.assertRaises(CompileError) as cm:
+            compile_program(program_from_dict(d))
+        self.assertEqual(cm.exception.code, "E101 NONRECIPROCAL")
+
+    def test_nonreciprocal_continuous_stiffness_is_rejected(self):
+        d = json.loads((ROOT / "examples" / "continuous_three_node.json").read_text())
+        d["dynamics"]["H"][0][1] += 1.0
         with self.assertRaises(CompileError) as cm:
             compile_program(program_from_dict(d))
         self.assertEqual(cm.exception.code, "E101 NONRECIPROCAL")

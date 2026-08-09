@@ -1,0 +1,28 @@
+name: v09-seed2400-static-split
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_seed2400_static_split.py'
+      - 'docs/CIRCUIT_V09_SEED2400_STATIC_SPLIT_PREREG.md'
+      - '.github/workflows/v09-seed2400-static-split.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run same-draw seed 2400 static split
+        run: python experiments/v09_seed2400_static_split.py
+      - name: Upload static split result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-seed2400-static-split
+          path: v09-seed2400-static-split.json

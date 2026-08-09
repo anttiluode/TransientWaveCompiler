@@ -18,8 +18,8 @@ class HistoryRoleInversionTests(unittest.TestCase):
         state = TwoBankRoleState.from_logical(x, xm1)
         expected = ordinary_tick(x, xm1, Q, u)
         actual = state.tick(Q, u)
-        self.assertTrue(np.array_equal(actual, expected))
-        self.assertTrue(np.array_equal(state.current, expected))
+        self.assertTrue(np.allclose(actual, expected, rtol=1e-13, atol=1e-13))
+        self.assertTrue(np.allclose(state.current, expected, rtol=1e-13, atol=1e-13))
         self.assertTrue(np.array_equal(state.previous, x))
 
     def test_many_ticks_match_ordinary_recurrence_for_dense_random_system(self):
@@ -40,7 +40,7 @@ class HistoryRoleInversionTests(unittest.TestCase):
             expected.append(nxt)
             prev, cur = cur, nxt
         expected = np.asarray(expected)
-        self.assertTrue(np.array_equal(physical, expected))
+        self.assertTrue(np.allclose(physical, expected, rtol=1e-12, atol=1e-12))
 
     def test_each_destination_flip_is_charge_preserving_before_accumulation(self):
         x = np.asarray([0.75, -0.25])

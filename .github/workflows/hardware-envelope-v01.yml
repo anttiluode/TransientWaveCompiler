@@ -1,0 +1,25 @@
+name: hardware-envelope-v01
+
+on:
+  push:
+    paths:
+      - 'transientwave/envelope.py'
+      - '.github/workflows/hardware-envelope-v01.yml'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen hardware envelope
+        run: python -m transientwave.envelope
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tw1a-hardware-envelope-v01
+          path: runs/hardware_envelope_v01.json

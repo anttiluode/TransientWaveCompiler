@@ -8,6 +8,10 @@ This experiment begins only after the ideal temporal-order benchmark passed 10/1
 
 All sparse weight, DAC and ADC paths use signed zero-preserving mid-tread quantization. Disabled edges and zero drive samples must remain exactly zero.
 
+## Frozen internal analog range
+
+The v0.3 tile uses an internal nodal-state full scale of **+/-20 state units** with clipping enabled. This range is fixed for every precision, tolerance and combined-corner run. `state_noise_std` is interpreted as an RMS fraction of this full scale, exactly as in the emulator configuration.
+
 ## Sense front-end added before precision tests
 
 The fixed +/-2 ADC range in emulator v0.2 was shown to erase legitimate small root signals on some arbors. v0.3 therefore adds a **static programmable-gain sense front-end (PGA)**.

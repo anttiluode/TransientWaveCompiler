@@ -1,0 +1,29 @@
+name: filter-cli-ci
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'pyproject.toml'
+      - 'transientwave/coupled_resonator_filter.py'
+      - 'transientwave/generalized_coupling_matrix.py'
+      - 'transientwave/filter_tuning.py'
+      - 'transientwave/filter_cli.py'
+      - 'tests/test_filter_tuning.py'
+      - '.github/workflows/filter-cli-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run filter tool tests
+        run: python -m unittest tests.test_filter_tuning tests.test_generalized_coupling_matrix tests.test_coupled_resonator_filter -v
+      - name: Check console entry point
+        run: twc-filter --help

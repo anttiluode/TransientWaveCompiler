@@ -6,10 +6,8 @@ from pathlib import Path
 import statistics
 
 from circuit_v05_segmented_mismatch_corner import SEEDS, config_for as c0d_config_for
-from transientwave.circuit_emulator_v05_edge_thermal import (
-    TW1AEdgeThermalConfig,
-    run_order_contrast_training,
-)
+from transientwave.circuit_emulator_v05_edge_thermal import TW1AEdgeThermalConfig
+from transientwave.circuit_emulator_v05_edge_thermal_fast import run_order_contrast_training
 from transientwave.order_benchmarks import compile_temporal_order_task
 
 
@@ -49,6 +47,7 @@ def main() -> None:
         "status": "diagnostic-only-spent-bodies",
         "preregistration": "docs/CIRCUIT_C0E_EDGE_THERMAL_PREREG.md",
         "seeds": SEEDS,
+        "execution_note": "selected edge thermal amplitudes cached once per PARAM_HOLD traversal; physics/RNG unchanged",
         "values": [],
     }
 

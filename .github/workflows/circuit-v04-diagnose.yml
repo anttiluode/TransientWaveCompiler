@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e .
-      - name: Diagnose failed v0.4 corner
+      - name: Diagnose failed v0.4 corner on spent bodies
         run: python experiments/circuit_v04_corner_diagnose.py
       - name: Upload v0.4 diagnostic result
         if: always()

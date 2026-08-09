@@ -1,0 +1,37 @@
+name: published-filter-systematic-nuisance-v05
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/measurement_aware_filter.py'
+      - 'tests/test_measurement_aware_filter.py'
+      - 'experiments/published_filter_systematic_nuisance_v05.py'
+      - 'docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_PREREG.md'
+      - '.github/workflows/published-filter-systematic-nuisance-v05.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, C, D]
+        nuisance_id: [4200, 4201, 4202, 4203, 4204]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit 12-variable measurement-aware gradient
+        run: python -m unittest tests.test_measurement_aware_filter -v
+      - name: Compare naive and aware fits
+        run: python experiments/published_filter_systematic_nuisance_v05.py --start ${{ matrix.start }} --nuisance-id ${{ matrix.nuisance_id }}
+      - name: Upload systematic-nuisance result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-systematic-v05-${{ matrix.start }}-${{ matrix.nuisance_id }}
+          path: published-filter-systematic-v05-*.json

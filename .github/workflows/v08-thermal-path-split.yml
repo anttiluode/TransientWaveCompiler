@@ -1,0 +1,28 @@
+name: v08-thermal-path-split
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_thermal_path_split.py'
+      - 'docs/CIRCUIT_V08_THERMAL_PATH_SPLIT_PREREG.md'
+      - '.github/workflows/v08-thermal-path-split.yml'
+  workflow_dispatch:
+
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen edge versus self thermal split
+        run: python experiments/v08_thermal_path_split.py
+      - name: Upload thermal split result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-thermal-path-split
+          path: v08-thermal-path-split.json

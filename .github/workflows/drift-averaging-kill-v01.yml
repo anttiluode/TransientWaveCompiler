@@ -1,0 +1,26 @@
+name: drift-averaging-kill-v01
+
+on:
+  push:
+    paths:
+      - "transientwave/drift_averaging.py"
+      - "transientwave/drift_averaging_kill_v01.py"
+      - "docs/DRIFT_AVERAGING_KILL_PREREG_V01.md"
+      - ".github/workflows/drift-averaging-kill-v01.yml"
+  workflow_dispatch:
+
+jobs:
+  kill-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.drift_averaging_kill_v01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drift-averaging-kill-v01
+          path: runs/drift_averaging_kill_v01.json

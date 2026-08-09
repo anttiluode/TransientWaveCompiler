@@ -1,0 +1,28 @@
+name: v07-edge-headroom-yield
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'experiments/v07_edge_headroom_yield.py'
+      - 'docs/CIRCUIT_V07_EDGE_HEADROOM_YIELD_PREREG.md'
+      - '.github/workflows/v07-edge-headroom-yield.yml'
+  workflow_dispatch:
+
+jobs:
+  yield-study:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run edge headroom yield Monte Carlo
+        run: python experiments/v07_edge_headroom_yield.py
+      - name: Upload headroom result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v07-edge-headroom-yield
+          path: v07-edge-headroom-yield.json

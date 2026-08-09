@@ -20,6 +20,8 @@ class PartitionedRNGTests(unittest.TestCase):
             drift_ktc_base_fraction=2e-5,
             drift_kick_common_rms_fraction=5e-6,
             drift_kick_diff_rms_fraction=5e-6,
+            prev_ratio_error_std=0.0,
+            prev_ratio_calibration=False,
         )
         return TW1APartitionedRNGTile(task["target"], cfg, sense_gain=1.0)
 

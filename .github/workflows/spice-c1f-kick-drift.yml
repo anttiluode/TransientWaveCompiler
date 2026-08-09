@@ -1,0 +1,23 @@
+name: spice-c1f-kick-drift
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'spice/check_c1f_kick_drift_shear.py'
+      - 'docs/CIRCUIT_C1F_KICK_DRIFT_PREREG.md'
+      - '.github/workflows/spice-c1f-kick-drift.yml'
+  workflow_dispatch:
+
+jobs:
+  c1f:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+      - name: Run C1f deterministic kick-drift shear gate
+        run: python3 spice/check_c1f_kick_drift_shear.py

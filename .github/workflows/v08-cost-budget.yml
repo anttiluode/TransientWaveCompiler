@@ -1,0 +1,27 @@
+name: v08-cost-budget
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_cost_budget.py'
+      - '.github/workflows/v08-cost-budget.yml'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Generate v0.8 capacitor subtotal report
+        run: python experiments/v08_cost_budget.py
+      - name: Upload v0.8 cost report
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-cost-budget
+          path: v08-cost-budget.json

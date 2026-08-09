@@ -7,6 +7,9 @@ on:
     paths:
       - 'spice/check_c1b_passive_additivity.py'
       - 'spice/check_c1c_virtual_sum.py'
+      - 'spice/check_c1d_finite_gain.py'
+      - 'spice/check_c1e_finite_bandwidth.py'
+      - 'docs/CIRCUIT_C1D_C1E_PREREG.md'
       - '.github/workflows/spice-c1-additivity.yml'
   workflow_dispatch:
 
@@ -27,3 +30,7 @@ jobs:
         run: python spice/check_c1b_passive_additivity.py
       - name: C1c active virtual-sum additivity
         run: python spice/check_c1c_virtual_sum.py
+      - name: C1d finite DC gain
+        run: python spice/check_c1d_finite_gain.py
+      - name: C1e finite 20ns bandwidth
+        run: python spice/check_c1e_finite_bandwidth.py

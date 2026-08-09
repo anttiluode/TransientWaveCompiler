@@ -1,0 +1,27 @@
+name: circuit-v05-capcodebook
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run preregistered C0c capacitor-codebook learning gate
+        run: python experiments/circuit_v05_capcodebook_corner.py
+      - name: Upload C0c codebook learning result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-v05-capcodebook
+          path: circuit-v05-capcodebook-corner.json
+          if-no-files-found: warn

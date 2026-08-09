@@ -7,6 +7,7 @@ on:
     paths:
       - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
       - 'experiments/v09_partitioned_thermal_factorial.py'
+      - 'tests/test_v09_partitioned_rng.py'
       - 'docs/BENCHMARK_V09_THERMAL_FACTORIAL_PREREG.md'
       - '.github/workflows/v09-partitioned-thermal-factorial.yml'
   workflow_dispatch:

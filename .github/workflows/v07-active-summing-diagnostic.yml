@@ -1,0 +1,30 @@
+name: v07-active-summing-diagnostic
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'transientwave/circuit_emulator_v07_active_summing.py'
+      - 'experiments/v07_active_summing_diagnostic.py'
+      - 'docs/CIRCUIT_V07_ACTIVE_SUMMING_DIAGNOSTIC_PREREG.md'
+      - '.github/workflows/v07-active-summing-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen v0.7 spent-body diagnostic
+        run: python experiments/v07_active_summing_diagnostic.py
+      - name: Upload v0.7 diagnostic result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v07-active-summing-diagnostic
+          path: v07-active-summing-diagnostic.json

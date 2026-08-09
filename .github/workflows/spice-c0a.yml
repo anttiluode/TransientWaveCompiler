@@ -1,0 +1,27 @@
+name: spice-c0a
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  c0a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ngspice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ngspice
+      - name: Run phase-symmetry timing deck
+        run: ngspice -b -o /tmp/tw1a-c0a.log spice/tw1a_v05_phase_symmetry.cir
+      - name: Check phase-symmetry measurements
+        run: |
+          cat /tmp/tw1a-c0a.log
+          python spice/check_phase_symmetry.py /tmp/tw1a-c0a.log

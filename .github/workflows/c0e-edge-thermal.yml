@@ -1,0 +1,27 @@
+name: c0e-edge-thermal
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen circuit-native edge thermal sweep
+        run: python experiments/c0e_edge_thermal_sweep.py
+      - name: Upload edge thermal result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c0e-edge-thermal
+          path: c0e-edge-thermal-sweep.json
+          if-no-files-found: warn

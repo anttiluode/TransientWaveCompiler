@@ -7,6 +7,7 @@ import numpy as np
 
 from .backend import TW1AGridBackend, direct_grid_route
 from .compiler import CompileError, compile_program
+from .hardware_contract import hardware_contract_for_manifest
 from .ir import Program
 from .microcode import attach_microcode
 
@@ -54,11 +55,24 @@ def compile_tw1a(program: Program, backend: TW1AGridBackend | None = None) -> di
             "q_diag_min": b.q_diag_min,
             "q_diag_max": b.q_diag_max,
         },
+        "programmable_edge_semantics": {
+            "kind": "reciprocal_rank1_edge_cell",
+            "stamp": "a_e * (e_i-e_j)(e_i-e_j)^T",
+            "quantization": "quantize one edge-cell coefficient once, then stamp the rank1 contribution",
+            "zero_code": "exact_off",
+        },
     }
     manifest["resources"]["active_propagation_edges"] = routing["active_edges"]
     manifest["resources"]["physical_edge_capacity"] = routing["physical_edge_capacity"]
     manifest["resources"]["unused_physical_edges"] = routing["unused_physical_edges"]
     manifest["resources"]["physical_ports"] = b.ports
+
+    # Report, rather than reject on, the current mixed-signal hardware evidence.
+    # Mathematical/routing validity remains the compiler's hard acceptance gate.
+    manifest["hardware_contract"] = hardware_contract_for_manifest(
+        manifest,
+        max_boundary_gain=program.constraints.max_boundary_gain,
+    )
 
     # TW-1A v0 has no terminal-state snapshot bank, so emit the four-traversal program.
     return attach_microcode(manifest, terminal_snapshot=False)

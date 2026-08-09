@@ -14,9 +14,13 @@ Then the same map is exactly the pair of shears
     p[n+1] = p[n] + (Q - 2 I) z[n] + u[n]
     z[n+1] = z[n] + p[n+1].
 
-This module is algebra only.  It does not claim that the fixed unity drift shear
-is noiseless in silicon.  The circuit question is whether that fixed primitive
-can be implemented more cheaply/quietly than resampling a programmable self
+The two vectors ``(z,p)`` carry exactly the same information as the existing
+``(CUR,PREV)`` banks, so adopting these coordinates does not by itself add
+state storage.
+
+This module is algebra only. It does not claim the unity kick/drift shears are
+noiseless in silicon. The circuit question is whether state-bank topology can
+implement them more cheaply/quietly than resampling a programmable self
 coefficient near +2 on every node and tick.
 """
 from __future__ import annotations
@@ -48,6 +52,48 @@ def kick_state_to_position_history(z: Array, p: Array) -> tuple[Array, Array]:
     if x.shape != v.shape:
         raise ValueError("z and p must have the same shape")
     return x.copy(), x - v
+
+
+def pointer_swap_mirror_in_kick_coordinates(z: Array, p: Array) -> tuple[Array, Array]:
+    """Exact image of the existing CUR<->PREV terminal mirror.
+
+    If ``p=z-z_previous``, swapping the two position-history banks gives
+
+        z_mirror = z_previous = z - p
+        p_mirror = z_previous - z = -p.
+
+    Thus a future (z,p) circuit needs one terminal inverse-drift shear plus a
+    polarity reinterpretation of P, rather than a 64-node arbitrary state
+    clone.
+    """
+    x = np.asarray(z, dtype=float)
+    mom = np.asarray(p, dtype=float)
+    if x.shape != mom.shape:
+        raise ValueError("z and p must have the same shape")
+    return x - mom, -mom
+
+
+def common_diff_terminal_boundary_in_kick_coordinates(
+    forward_z: Array,
+    forward_p: Array,
+    terminal_error: Array,
+) -> tuple[Array, Array, Array, Array]:
+    """Map the v0.8 common/difference terminal boundary into (z,p).
+
+    v0.8 first pointer-swaps the forward C current/previous state, initializes
+    D current/previous to zero, then injects the terminal error into D current.
+    In kick coordinates this is exactly
+
+        C_z, C_p = z-p, -p
+        D_z, D_p = e_T, e_T.
+
+    No terminal analog copy of the forward state is introduced.
+    """
+    cz, cp = pointer_swap_mirror_in_kick_coordinates(forward_z, forward_p)
+    err = np.asarray(terminal_error, dtype=float)
+    if err.shape != cz.shape:
+        raise ValueError("terminal_error must match state shape")
+    return cz, cp, err.copy(), err.copy()
 
 
 def second_order_step(z: Array, z_previous: Array, Q: Array, u: Array) -> tuple[Array, Array]:

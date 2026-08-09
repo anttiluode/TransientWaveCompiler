@@ -1,0 +1,24 @@
+name: combined-drift-ppm-diagnostic-v07
+
+on:
+  push:
+    paths:
+      - "transientwave/combined_drift_ppm_diagnostic_v07.py"
+      - ".github/workflows/combined-drift-ppm-diagnostic-v07.yml"
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.combined_drift_ppm_diagnostic_v07
+      - uses: actions/upload-artifact@v4
+        with:
+          name: combined-drift-ppm-diagnostic-v07
+          path: runs/combined_drift_ppm_diagnostic_v07.json

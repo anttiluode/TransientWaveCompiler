@@ -1,0 +1,27 @@
+name: ideal-order-tail-control
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/ideal_order_tail_control.py'
+      - '.github/workflows/ideal-order-tail-control.yml'
+  workflow_dispatch:
+
+jobs:
+  control:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run ideal exact physical-credit control
+        run: python experiments/ideal_order_tail_control.py
+      - name: Upload ideal control
+        uses: actions/upload-artifact@v4
+        with:
+          name: ideal-order-tail-control
+          path: ideal-order-tail-control.json

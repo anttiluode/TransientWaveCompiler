@@ -18,10 +18,20 @@ The two vectors ``(z,p)`` carry exactly the same information as the existing
 ``(CUR,PREV)`` banks, so adopting these coordinates does not by itself add
 state storage.
 
+A further exact compiler coordinate is the scaled momentum
+
+    r[n] = lambda * p[n], lambda > 0,
+
+which gives
+
+    r[n+1] = r[n] + lambda*(Q-2I)z[n] + lambda*u[n]
+    z[n+1] = z[n] + r[n+1]/lambda.
+
+This exposes an explicit circuit trade: larger lambda increases kick/edge/source
+range while reducing the drift coefficient and its sampled-cap thermal packet.
+
 This module is algebra only. It does not claim the unity kick/drift shears are
-noiseless in silicon. The circuit question is whether state-bank topology can
-implement them more cheaply/quietly than resampling a programmable self
-coefficient near +2 on every node and tick.
+noiseless in silicon.
 """
 from __future__ import annotations
 
@@ -54,18 +64,30 @@ def kick_state_to_position_history(z: Array, p: Array) -> tuple[Array, Array]:
     return x.copy(), x - v
 
 
+def kick_to_scaled_momentum(z: Array, p: Array, scale: float) -> tuple[Array, Array]:
+    lam = float(scale)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError("scale must be finite and positive")
+    x = np.asarray(z, dtype=float)
+    mom = np.asarray(p, dtype=float)
+    if x.shape != mom.shape:
+        raise ValueError("z and p must have the same shape")
+    return x.copy(), lam * mom
+
+
+def scaled_momentum_to_kick(z: Array, r: Array, scale: float) -> tuple[Array, Array]:
+    lam = float(scale)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError("scale must be finite and positive")
+    x = np.asarray(z, dtype=float)
+    scaled = np.asarray(r, dtype=float)
+    if x.shape != scaled.shape:
+        raise ValueError("z and r must have the same shape")
+    return x.copy(), scaled / lam
+
+
 def pointer_swap_mirror_in_kick_coordinates(z: Array, p: Array) -> tuple[Array, Array]:
-    """Exact image of the existing CUR<->PREV terminal mirror.
-
-    If ``p=z-z_previous``, swapping the two position-history banks gives
-
-        z_mirror = z_previous = z - p
-        p_mirror = z_previous - z = -p.
-
-    Thus a future (z,p) circuit needs one terminal inverse-drift shear plus a
-    polarity reinterpretation of P, rather than a 64-node arbitrary state
-    clone.
-    """
+    """Exact image of the existing CUR<->PREV terminal mirror."""
     x = np.asarray(z, dtype=float)
     mom = np.asarray(p, dtype=float)
     if x.shape != mom.shape:
@@ -73,27 +95,50 @@ def pointer_swap_mirror_in_kick_coordinates(z: Array, p: Array) -> tuple[Array, 
     return x - mom, -mom
 
 
+def pointer_swap_mirror_in_scaled_coordinates(
+    z: Array, r: Array, scale: float
+) -> tuple[Array, Array]:
+    """Exact terminal mirror for r=lambda*p: Z<-Z-R/lambda, R<- -R."""
+    lam = float(scale)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError("scale must be finite and positive")
+    x = np.asarray(z, dtype=float)
+    scaled = np.asarray(r, dtype=float)
+    if x.shape != scaled.shape:
+        raise ValueError("z and r must have the same shape")
+    return x - scaled / lam, -scaled
+
+
 def common_diff_terminal_boundary_in_kick_coordinates(
     forward_z: Array,
     forward_p: Array,
     terminal_error: Array,
 ) -> tuple[Array, Array, Array, Array]:
-    """Map the v0.8 common/difference terminal boundary into (z,p).
-
-    v0.8 first pointer-swaps the forward C current/previous state, initializes
-    D current/previous to zero, then injects the terminal error into D current.
-    In kick coordinates this is exactly
-
-        C_z, C_p = z-p, -p
-        D_z, D_p = e_T, e_T.
-
-    No terminal analog copy of the forward state is introduced.
-    """
+    """Map the v0.8 common/difference terminal boundary into (z,p)."""
     cz, cp = pointer_swap_mirror_in_kick_coordinates(forward_z, forward_p)
     err = np.asarray(terminal_error, dtype=float)
     if err.shape != cz.shape:
         raise ValueError("terminal_error must match state shape")
     return cz, cp, err.copy(), err.copy()
+
+
+def common_diff_terminal_boundary_in_scaled_coordinates(
+    forward_z: Array,
+    forward_r: Array,
+    terminal_error: Array,
+    scale: float,
+) -> tuple[Array, Array, Array, Array]:
+    """v0.8 common/difference terminal boundary for r=lambda*p.
+
+    Since the old D boundary has current=e_T and previous=0, p_D=e_T and
+    therefore r_D=lambda*e_T.
+    """
+    lam = float(scale)
+    cz, cr = pointer_swap_mirror_in_scaled_coordinates(forward_z, forward_r, lam)
+    err = np.asarray(terminal_error, dtype=float)
+    if err.shape != cz.shape:
+        raise ValueError("terminal_error must match state shape")
+    return cz, cr, err.copy(), lam * err
 
 
 def second_order_step(z: Array, z_previous: Array, Q: Array, u: Array) -> tuple[Array, Array]:
@@ -115,6 +160,22 @@ def kick_drift_step(z: Array, p: Array, K: Array, u: Array) -> tuple[Array, Arra
     return z_next, p_next
 
 
+def scaled_kick_drift_step(
+    z: Array, r: Array, K: Array, u: Array, scale: float
+) -> tuple[Array, Array]:
+    """Exact scaled-momentum shear with r=lambda*p."""
+    lam = float(scale)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError("scale must be finite and positive")
+    x = np.asarray(z, dtype=float)
+    scaled = np.asarray(r, dtype=float)
+    k = np.asarray(K, dtype=float)
+    src = np.asarray(u, dtype=float)
+    r_next = scaled + lam * (k @ x + src)
+    z_next = x + r_next / lam
+    return z_next, r_next
+
+
 def inverse_kick_drift_step(z_next: Array, p_next: Array, K: Array, u: Array) -> tuple[Array, Array]:
     """Exact inverse of one kick-drift step for the same source sample."""
     xn = np.asarray(z_next, dtype=float)
@@ -124,6 +185,21 @@ def inverse_kick_drift_step(z_next: Array, p_next: Array, K: Array, u: Array) ->
     z = xn - pn
     p = pn - k @ z - src
     return z, p
+
+
+def inverse_scaled_kick_drift_step(
+    z_next: Array, r_next: Array, K: Array, u: Array, scale: float
+) -> tuple[Array, Array]:
+    lam = float(scale)
+    if not np.isfinite(lam) or lam <= 0.0:
+        raise ValueError("scale must be finite and positive")
+    xn = np.asarray(z_next, dtype=float)
+    rn = np.asarray(r_next, dtype=float)
+    k = np.asarray(K, dtype=float)
+    src = np.asarray(u, dtype=float)
+    z = xn - rn / lam
+    r = rn - lam * (k @ z + src)
+    return z, r
 
 
 def decompose_kick_self_from_q_self(q_self: Array) -> Array:

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import statistics
 
-from experiments.circuit_v04_corner import SEEDS, config_for
+from circuit_v04_corner import SEEDS, config_for
 from transientwave.circuit_emulator_v04 import run_order_contrast_training
 from transientwave.order_benchmarks import compile_temporal_order_task
 

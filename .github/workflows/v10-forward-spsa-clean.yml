@@ -1,0 +1,33 @@
+name: v10-forward-spsa-clean
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v10_forward_spsa_clean.py'
+      - 'docs/BENCHMARK_V10_FORWARD_SPSA_CLEAN_PREREG.md'
+      - '.github/workflows/v10-forward-spsa-clean.yml'
+  workflow_dispatch:
+
+jobs:
+  calibrate:
+    strategy:
+      fail-fast: false
+      matrix:
+        c: ['0.25', '0.5', '1.0', '2.0']
+        step_size: ['0.10', '0.20', '0.40']
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run clean forward-only SPSA condition
+        run: python experiments/v10_forward_spsa_clean.py --c ${{ matrix.c }} --step-size ${{ matrix.step_size }}
+      - name: Upload SPSA calibration result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v10-forward-spsa-clean-c${{ matrix.c }}-s${{ matrix.step_size }}
+          path: v10-forward-spsa-clean-*.json

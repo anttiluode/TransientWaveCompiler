@@ -1,0 +1,27 @@
+name: hardware-envelope-order-v05
+
+on:
+  push:
+    paths:
+      - "transientwave/hardware_envelope_order_v05.py"
+      - "transientwave/emulator_v05.py"
+      - "docs/HARDWARE_ENVELOPE_ORDER_PREREG_V05.md"
+      - ".github/workflows/hardware-envelope-order-v05.yml"
+  workflow_dispatch:
+
+jobs:
+  envelope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen rank-one edge-cell hardware envelope
+        run: python -m transientwave.hardware_envelope_order_v05
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hardware-envelope-order-v05
+          path: runs/hardware_envelope_order_v05.json

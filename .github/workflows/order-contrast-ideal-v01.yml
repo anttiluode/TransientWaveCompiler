@@ -1,0 +1,29 @@
+name: order-contrast-ideal-v01
+
+on:
+  push:
+    paths:
+      - "transientwave/order_benchmarks.py"
+      - "transientwave/order_contrast.py"
+      - "transientwave/order_contrast_ideal_v01.py"
+      - "transientwave/emulator.py"
+      - "transientwave/emulator_v02.py"
+      - "docs/ORDER_CONTRAST_IDEAL_PREREG_V01.md"
+      - ".github/workflows/order-contrast-ideal-v01.yml"
+  workflow_dispatch:
+
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen ideal temporal-order qualification
+        run: python -m transientwave.order_contrast_ideal_v01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order-contrast-ideal-v01
+          path: runs/order_contrast_ideal_v01.json

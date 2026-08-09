@@ -1,0 +1,27 @@
+name: c0d-cap-mismatch
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen capacitor mismatch architecture Monte Carlo
+        run: python experiments/c0d_cap_mismatch.py
+      - name: Upload C0d mismatch result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c0d-cap-mismatch
+          path: c0d-cap-mismatch.json
+          if-no-files-found: warn

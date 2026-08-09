@@ -40,7 +40,8 @@ Sx samp sum ctl 0 SW
 .tran 0.05n 200n UIC
 .measure tran vbefore FIND v(out) AT=5n
 .measure tran vafter  FIND v(out) AT=180n
-.measure tran vsummax MAX abs(v(sum)) FROM=20n TO=180n
+.measure tran vsumhi MAX v(sum) FROM=20n TO=180n
+.measure tran vsumlo MIN v(sum) FROM=20n TO=180n
 .end
 """
 
@@ -67,7 +68,11 @@ def run_case(initial_out: float) -> tuple[float, float, float]:
         text = (log.read_text(errors="replace") if log.exists() else "") + proc.stdout + proc.stderr
         if proc.returncode != 0:
             raise RuntimeError(f"ngspice failed ({proc.returncode})\n{text}")
-        return _measure(text, "vbefore"), _measure(text, "vafter"), _measure(text, "vsummax")
+        before = _measure(text, "vbefore")
+        after = _measure(text, "vafter")
+        hi = _measure(text, "vsumhi")
+        lo = _measure(text, "vsumlo")
+        return before, after, max(abs(hi), abs(lo))
 
 
 def main() -> None:

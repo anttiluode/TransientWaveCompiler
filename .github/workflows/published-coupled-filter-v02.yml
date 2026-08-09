@@ -1,0 +1,36 @@
+name: published-coupled-filter-v02
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/coupled_resonator_filter.py'
+      - 'tests/test_coupled_resonator_filter.py'
+      - 'experiments/published_coupled_filter_v02.py'
+      - 'docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_PREREG.md'
+      - '.github/workflows/published-coupled-filter-v02.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, B, C, D, E]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit diagonal plus coupling gradients
+        run: python -m unittest tests.test_coupled_resonator_filter -v
+      - name: Tune six physical matrix knobs
+        run: python experiments/published_coupled_filter_v02.py --start ${{ matrix.start }}
+      - name: Upload tuning result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-coupled-filter-v02-${{ matrix.start }}
+          path: published-coupled-filter-v02-*.json

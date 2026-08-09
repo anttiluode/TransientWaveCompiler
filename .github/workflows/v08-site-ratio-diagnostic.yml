@@ -1,0 +1,30 @@
+name: v08-site-ratio-diagnostic
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v08_site_ratio.py'
+      - 'experiments/v08_site_ratio_diagnostic.py'
+      - 'docs/CIRCUIT_V08_SITE_RATIO_DIAGNOSTIC_PREREG.md'
+      - '.github/workflows/v08-site-ratio-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen v0.8 site-ratio diagnostic
+        run: python experiments/v08_site_ratio_diagnostic.py
+      - name: Upload v0.8 site-ratio diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-site-ratio-diagnostic
+          path: v08-site-ratio-diagnostic.json

@@ -1,0 +1,27 @@
+name: c0e-state-noise
+
+on:
+  push:
+    branches:
+      - agent/tw1a-phase-symmetric-v05
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run frozen C0e state-noise sweep
+        run: python experiments/c0e_state_noise_sweep.py
+      - name: Upload C0e state-noise result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c0e-state-noise
+          path: c0e-state-noise-sweep.json
+          if-no-files-found: warn

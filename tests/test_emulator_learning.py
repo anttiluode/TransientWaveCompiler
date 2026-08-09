@@ -61,7 +61,14 @@ class TW1AEmulatorGradientTests(unittest.TestCase):
 
 
 class TW1AEmulatorLearningTests(unittest.TestCase):
+    @unittest.expectedFailure
     def test_preregistered_baseline_learns_across_five_arbors(self):
+        """Frozen v0.1 baseline: formally failed and retained as expected failure.
+
+        See docs/HARDWARE_BASELINE_V01_FAIL.md.  If this becomes an unexpected
+        success without a declared semantic/version change, unittest will flag
+        it rather than silently replacing the preregistered result.
+        """
         reductions = []
         shuffled = []
         exact_better = 0

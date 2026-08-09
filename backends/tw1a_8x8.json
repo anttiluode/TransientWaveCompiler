@@ -1,0 +1,37 @@
+{
+  "name": "tw1a-8x8-v0",
+  "family": "tw1-clocked-mixed-signal",
+  "version": 1,
+  "tile": {
+    "rows": 8,
+    "cols": 8,
+    "nodes": 64,
+    "connectivity": "four_neighbor_grid",
+    "physical_edges": 112,
+    "max_trainable_edges": 112,
+    "ports": 8
+  },
+  "coefficients": {
+    "q_edge_min": -0.25,
+    "q_edge_max": 0.25,
+    "q_diag_min": -1.95,
+    "q_diag_max": 1.95,
+    "edge_effective_bits_target": 9,
+    "port_effective_bits_target": 11,
+    "credit_adc_effective_bits_target": 11
+  },
+  "runtime": {
+    "supports_terminal_snapshot": false,
+    "supports_plus_minus_echo": true,
+    "supports_single_run_lockin": false,
+    "supports_local_credit": true,
+    "supports_host_parameter_update": true,
+    "supports_local_parameter_update": false
+  },
+  "limits": {
+    "max_boundary_gain": 8.0,
+    "max_differential_pass_drift_target": 0.002,
+    "state_snr_db_target": 40.0
+  },
+  "status": "logical costing target; circuit values are design hypotheses, not silicon measurements"
+}

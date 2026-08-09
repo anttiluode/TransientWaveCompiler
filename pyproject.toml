@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "transientwavecompiler"
 version = "0.1.0"
-description = "Compiler for finite-time damped reciprocal wave programs targeting an echo-trainable physical mesh"
+description = "Compiler and tuning toolkit for sparse reciprocal wave systems with a mixed-signal research backend"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.26"]
 
@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.26"]
 twc = "transientwave.cli:main"
 twc-tw1a = "transientwave.hw_cli:main"
 twc-hw = "transientwave.hardware_report_cli:main"
+twc-filter = "transientwave.filter_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

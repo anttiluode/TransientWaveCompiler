@@ -1,0 +1,28 @@
+name: v08-gradient-averaging
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_gradient_averaging_sweep.py'
+      - 'docs/CIRCUIT_V08_GRADIENT_AVERAGING_PREREG.md'
+      - '.github/workflows/v08-gradient-averaging.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run complete-gradient averaging sweep
+        run: python experiments/v08_gradient_averaging_sweep.py
+      - name: Upload averaging result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-gradient-averaging
+          path: v08-gradient-averaging-sweep.json

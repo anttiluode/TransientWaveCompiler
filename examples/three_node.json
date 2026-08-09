@@ -1,0 +1,66 @@
+{
+  "name": "three_node_demo",
+  "version": 1,
+  "dt": 0.05,
+  "steps": 32,
+  "state": {
+    "nodes": 3,
+    "initial": [0.0, 0.0, 0.0],
+    "initial_previous": [0.0, 0.0, 0.0]
+  },
+  "dynamics": {
+    "form": "damped_second_order",
+    "a": 0.99,
+    "M": [
+      [1.7909773868, 0.0497493719, 0.0],
+      [0.0497493719, 1.7909773868, 0.0497493719],
+      [0.0, 0.0497493719, 1.7909773868]
+    ]
+  },
+  "ports": [
+    {
+      "name": "input",
+      "node": 0,
+      "kind": "drive",
+      "waveform": [1.0, 0.0, 0.0, 0.0]
+    },
+    {
+      "name": "output",
+      "node": 2,
+      "kind": "sense"
+    }
+  ],
+  "objective": {
+    "kind": "quadratic_energy",
+    "port": "output",
+    "weight": 1.0
+  },
+  "trainable_edges": [
+    {
+      "i": 0,
+      "j": 1,
+      "min": 0.0,
+      "max": 0.1,
+      "matrix_scale": -0.05,
+      "group": "wave_body"
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "min": 0.0,
+      "max": 0.1,
+      "matrix_scale": -0.05,
+      "group": "wave_body"
+    }
+  ],
+  "constraints": {
+    "stability_margin": 0.001,
+    "max_boundary_gain": 8.0,
+    "max_operator_asymmetry": 1e-10,
+    "require_reciprocal": true,
+    "allow_partition": false
+  },
+  "metadata": {
+    "purpose": "small exact damping-gauge compiler example"
+  }
+}

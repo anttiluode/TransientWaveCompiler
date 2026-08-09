@@ -7,6 +7,7 @@ import numpy as np
 
 from transientwave.compiler import CompileError, compile_program, simulate_compiled, simulate_source
 from transientwave.ir import program_from_dict
+from transientwave.physical import compile_tw1a
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +115,25 @@ class CompilerTests(unittest.TestCase):
             -0.05 / r,
             places=12,
         )
+
+    def test_tw1a_local_graph_routes(self):
+        man = compile_tw1a(self.load_continuous_example())
+        self.assertEqual(man["backend"], "tw1a-8x8-v0")
+        self.assertEqual(man["physical"]["active_edges"], 2)
+        self.assertEqual(man["resources"]["physical_edge_capacity"], 112)
+        self.assertEqual(len(man["physical"]["trainable_edge_map"]), 2)
+
+    def test_tw1a_rejects_mathematically_valid_nonlocal_wire(self):
+        d = json.loads((ROOT / "examples" / "three_node.json").read_text())
+        # Add a symmetric 0<->2 coupling. The reversible math remains legal,
+        # but row-major physical nodes 0 and 2 are not four-neighbor connected.
+        d["dynamics"]["M"][0][2] = 0.01
+        d["dynamics"]["M"][2][0] = 0.01
+        p = program_from_dict(d)
+        compile_program(p)  # algebraic compiler accepts it
+        with self.assertRaises(CompileError) as cm:
+            compile_tw1a(p)
+        self.assertEqual(cm.exception.code, "E410 ROUTING_FAILURE")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 """C1b: prove that passive edge charge sharing is not a NEXT accumulator.
 
-The edge sampler is one differential 64 pF capacitor precharged to 0.4 V.  The
-destination state is represented by two 1 nF halves.  When the sample capacitor
+The edge sampler is one differential 64 pF capacitor precharged to 0.4 V. The
+destination state is represented by two 1 nF halves. When the sample capacitor
 is simply connected across those precharged state halves, the final differential
 voltage is passive charge sharing:
 
     Vfinal = (Cstate/2 * Vinitial + Cedge * Vsample) / (Cstate/2 + Cedge).
 
-Therefore the increment depends on the state already stored.  C1b intentionally
+Therefore the increment depends on the state already stored. C1b intentionally
 *passes* when this non-additivity is observed, because its purpose is to reject
 passive sharing as the TW-1A NEXT summing mechanism.
 """
@@ -44,10 +44,11 @@ Rsp sp 0 1e12
 Rsn sn 0 1e12
 Splus sp dp ctl 0 SW
 Sminus sn dn ctl 0 SW
+* Explicit differential probe node; ngspice .measure is happier with one scalar.
+Ediff diff 0 dp dn 1
 .ic v(dp)={vp} v(dn)={vn} v(sp)=0.2 v(sn)=-0.2
 .tran 0.1n 200n UIC
-.measure tran vfinal FIND v(dp,sn) AT=1n
-.measure tran dpfinal FIND v(dp,dn) AT={TMEAS}
+.measure tran dpfinal FIND v(diff) AT={TMEAS}
 .end
 """
 
@@ -83,21 +84,18 @@ def main() -> None:
     ratio = inc_pre / inc0
     additivity_error = abs(1.0 - ratio)
 
-    print(f"empty final             {v0:+.9f} V")
-    print(f"precharged final        {vpre:+.9f} V")
-    print(f"empty increment         {inc0*1e3:+.6f} mV")
-    print(f"precharged increment    {inc_pre*1e3:+.6f} mV")
-    print(f"increment ratio         {ratio:.9f}")
-    print(f"additivity error        {100*additivity_error:.6f}%")
-    print(f"analytic empty final    {expected0:+.9f} V")
+    print(f"empty final              {v0:+.9f} V")
+    print(f"precharged final         {vpre:+.9f} V")
+    print(f"empty increment          {inc0*1e3:+.6f} mV")
+    print(f"precharged increment     {inc_pre*1e3:+.6f} mV")
+    print(f"increment ratio          {ratio:.9f}")
+    print(f"additivity error         {100*additivity_error:.6f}%")
+    print(f"analytic empty final     {expected0:+.9f} V")
     print(f"analytic precharge final {expected_pre:+.9f} V")
 
-    # Numerical SPICE result must match the static charge-sharing model closely.
     if abs(v0 - expected0) > 2e-5 or abs(vpre - expected_pre) > 2e-5:
         raise SystemExit("C1b FAIL: SPICE did not reproduce passive charge sharing")
 
-    # The kill gate: an accumulator would give the same increment. Passive
-    # sharing must instead show gross state dependence (~50% here).
     if additivity_error < 0.45:
         raise SystemExit("C1b FAIL: passive sharing unexpectedly looked additive")
 

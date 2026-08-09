@@ -1,0 +1,40 @@
+name: v09-fresh-failure-diag
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_fresh_failure_diag.py'
+      - 'docs/CIRCUIT_V09_FRESH_FAILURE_DIAG_PREREG.md'
+      - '.github/workflows/v09-fresh-failure-diag.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        condition:
+          - formal_reference
+          - no_drift_switch_residual
+          - no_drift_thermal
+          - no_edge_thermal
+          - no_kick_self_thermal
+          - all_thermal_zero
+          - all_thermal_1e-5
+          - v08_qualified_b1e-5
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen diagnostic condition
+        run: python experiments/v09_fresh_failure_diag.py --condition ${{ matrix.condition }}
+      - name: Upload condition result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-fresh-diag-${{ matrix.condition }}
+          path: v09-fresh-diag-${{ matrix.condition }}.json

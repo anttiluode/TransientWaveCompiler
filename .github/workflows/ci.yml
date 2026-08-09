@@ -15,3 +15,5 @@ jobs:
       - run: pip install -e .
       - run: python -m unittest discover -s tests -v
       - run: twc examples/three_node.json -o /tmp/three_node.tw1.json
+      - run: twc examples/continuous_three_node.json -o /tmp/continuous_three_node.tw1.json
+      - run: twc-tw1a examples/continuous_three_node.json -o /tmp/continuous_three_node.tw1a.json

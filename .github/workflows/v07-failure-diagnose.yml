@@ -1,0 +1,29 @@
+name: v07-failure-diagnose
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'experiments/v07_failure_diagnose.py'
+      - 'docs/CIRCUIT_V07_FAILURE_DIAG_PREREG.md'
+      - '.github/workflows/v07-failure-diagnose.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen v0.7 failure diagnosis
+        run: python experiments/v07_failure_diagnose.py
+      - name: Upload diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v07-failure-diagnosis
+          path: v07-failure-diagnosis.json

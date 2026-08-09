@@ -12,7 +12,7 @@ import statistics
 
 from transientwave.circuit_emulator import run_order_contrast_training
 from transientwave.order_benchmarks import compile_temporal_order_task
-from experiments.circuit_native_corner_v01 import SEEDS, config_for
+from circuit_native_corner_v01 import SEEDS, config_for
 
 
 CASES = {

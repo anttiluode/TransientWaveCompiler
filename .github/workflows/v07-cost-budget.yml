@@ -1,0 +1,28 @@
+name: v07-cost-budget
+
+on:
+  push:
+    branches:
+      - agent/tw1a-active-summing-v07
+    paths:
+      - 'transientwave/active_summing_budget.py'
+      - 'experiments/v07_cost_budget.py'
+      - '.github/workflows/v07-cost-budget.yml'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Generate assumption-explicit cost report
+        run: python experiments/v07_cost_budget.py
+      - name: Upload cost report
+        uses: actions/upload-artifact@v4
+        with:
+          name: v07-cost-budget
+          path: v07-cost-budget.json

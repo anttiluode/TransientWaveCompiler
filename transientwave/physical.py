@@ -8,6 +8,7 @@ import numpy as np
 from .backend import TW1AGridBackend, direct_grid_route
 from .compiler import CompileError, compile_program
 from .ir import Program
+from .microcode import attach_microcode
 
 
 def compile_tw1a(program: Program, backend: TW1AGridBackend | None = None) -> dict[str, Any]:
@@ -58,4 +59,6 @@ def compile_tw1a(program: Program, backend: TW1AGridBackend | None = None) -> di
     manifest["resources"]["physical_edge_capacity"] = routing["physical_edge_capacity"]
     manifest["resources"]["unused_physical_edges"] = routing["unused_physical_edges"]
     manifest["resources"]["physical_ports"] = b.ports
-    return manifest
+
+    # TW-1A v0 has no terminal-state snapshot bank, so emit the four-traversal program.
+    return attach_microcode(manifest, terminal_snapshot=False)

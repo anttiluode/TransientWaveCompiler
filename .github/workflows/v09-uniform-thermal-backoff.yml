@@ -1,0 +1,36 @@
+name: v09-uniform-thermal-backoff
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/circuit_emulator_v09_partitioned_rng.py'
+      - 'experiments/v09_uniform_thermal_backoff.py'
+      - 'docs/BENCHMARK_V09_UNIFORM_THERMAL_BACKOFF_PREREG.md'
+      - 'tests/test_v09_partitioned_rng.py'
+      - '.github/workflows/v09-uniform-thermal-backoff.yml'
+  workflow_dispatch:
+
+jobs:
+  backoff:
+    strategy:
+      fail-fast: false
+      matrix:
+        b: ['0', '2.5e-6', '5e-6', '7.5e-6', '1e-5', '1.25e-5', '1.5e-5', '1.75e-5', '2e-5']
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Verify partitioned RNG invariants
+        run: python -m unittest tests.test_v09_partitioned_rng -v
+      - name: Run one uniform thermal point across five dynamic replicates
+        run: python experiments/v09_uniform_thermal_backoff.py --b ${{ matrix.b }}
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-uniform-thermal-b-${{ matrix.b }}
+          path: v09-uniform-thermal-b-*.json

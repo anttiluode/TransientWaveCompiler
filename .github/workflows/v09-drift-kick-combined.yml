@@ -1,0 +1,28 @@
+name: v09-drift-kick-combined
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_drift_kick_combined.py'
+      - 'docs/CIRCUIT_V09_DRIFT_KICK_COMBINED_PREREG.md'
+      - '.github/workflows/v09-drift-kick-combined.yml'
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen simultaneous drift residual gate
+        run: python experiments/v09_drift_kick_combined.py
+      - name: Upload combined reference result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-drift-kick-combined
+          path: v09-drift-kick-combined.json

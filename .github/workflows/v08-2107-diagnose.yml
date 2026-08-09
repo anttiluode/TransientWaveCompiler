@@ -1,0 +1,29 @@
+name: v08-2107-diagnose
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v08_2107_failure_diagnose.py'
+      - 'docs/CIRCUIT_V08_2107_DIAG_PREREG.md'
+      - '.github/workflows/v08-2107-diagnose.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run frozen same-silicon v0.8 failure diagnosis
+        run: python experiments/v08_2107_failure_diagnose.py
+      - name: Upload diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v08-2107-failure-diagnosis
+          path: v08-2107-failure-diagnosis.json

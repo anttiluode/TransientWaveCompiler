@@ -1,0 +1,31 @@
+name: v09-kick-self-audit
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/kick_drift.py'
+      - 'tests/test_kick_drift.py'
+      - 'experiments/v09_kick_self_audit.py'
+      - '.github/workflows/v09-kick-self-audit.yml'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run kick-drift unit tests
+        run: python -m unittest tests.test_kick_drift -v
+      - name: Audit programmable self residual
+        run: python experiments/v09_kick_self_audit.py
+      - name: Upload audit result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-kick-self-audit
+          path: v09-kick-self-audit.json

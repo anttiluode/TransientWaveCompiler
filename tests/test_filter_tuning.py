@@ -1,8 +1,13 @@
+import contextlib
+import io
+import json
+import tempfile
 import unittest
 
 import numpy as np
 
 from transientwave.coupled_resonator_filter import MatrixParameter, matrix_from_parameters
+from transientwave.filter_cli import main as filter_cli_main
 from transientwave.filter_tuning import parse_filter_spec, tune_filter_spec
 from transientwave.generalized_coupling_matrix import generalized_scattering
 
@@ -48,6 +53,16 @@ class FilterTuningTests(unittest.TestCase):
         self.assertLess(result["final_loss"], 1e-8)
         self.assertGreater(result["loss_reduction_factor"], 1e5)
         self.assertEqual(result["parameter_order"], ["mS1", "m12", "m2L"])
+
+    def test_cli_validate_only(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as f:
+            json.dump(self.make_spec(), f)
+            path = f.name
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = filter_cli_main(["fit", path, "--validate-only"])
+        self.assertEqual(rc, 0)
+        self.assertIn("valid explicit-port filter spec", buf.getvalue())
 
     def test_rejects_duplicate_reciprocal_entry(self):
         spec = self.make_spec()

@@ -7,6 +7,10 @@ seven programmable branches are physically disconnected by their switches.
 
 The positive-code sweep is exhaustive (0..127). Representative negative codes
 reuse the same magnitude selection with the transfer polarity crossbar reversed.
+
+C0c is intentionally a *topology/static charge-sharing* gate.  C0a already tests
+finite settling and phase history, so the C0c sample/transfer apertures are made
+long enough that RC settling is negligible compared with the array checks.
 """
 from __future__ import annotations
 
@@ -36,12 +40,14 @@ def deck_for(code: int) -> str:
         ".option numdgt=12",
         "VSTATEI vi 0 0.2",
         "VSTATEJ vj 0 -0.2",
-        "VRESET rst 0 PWL(0n 1 0.50n 1 0.51n 0 15n 0)",
-        "VSAMPLE samp 0 PWL(0n 0 0.69n 0 0.70n 1 2.70n 1 2.71n 0 15n 0)",
-        "VXFER xfer 0 PWL(0n 0 2.99n 0 3.00n 1 13.00n 1 13.01n 0 15n 0)",
+        # Long static apertures intentionally decouple this topology test from
+        # the finite-settling timing problem already covered by C0a.
+        "VRESET rst 0 PWL(0n 1 1.00n 1 1.10n 0 130n 0)",
+        "VSAMPLE samp 0 PWL(0n 0 1.90n 0 2.00n 1 22.00n 1 22.10n 0 130n 0)",
+        "VXFER xfer 0 PWL(0n 0 24.90n 0 25.00n 1 125.00n 1 125.10n 0 130n 0)",
         "VOFF offctl 0 0",
-        # Millisecond off/leak RC versus a 15 ns experiment keeps disabled
-        # branches electrically anchored without materially moving their charge.
+        # Millisecond off/leak RC versus a 130 ns experiment anchors disabled
+        # branches without materially moving their stored charge.
         ".model ESW SW(Ron=10 Roff=1e9 Vt=0.5 Vh=0)",
         ".model RSW SW(Ron=1 Roff=1e9 Vt=0.5 Vh=0)",
         "CSUMI sumi 0 1n",
@@ -84,11 +90,9 @@ def deck_for(code: int) -> str:
 
     lines.extend(
         [
-            # Use the DC operating point rather than UIC so every disabled
-            # branch has a well-defined initial voltage before switching starts.
-            ".tran 5p 15n",
-            ".measure tran VI_SUM FIND v(sumi) AT=12.90n",
-            ".measure tran VJ_SUM FIND v(sumj) AT=12.90n",
+            ".tran 50p 130n",
+            ".measure tran VI_SUM FIND v(sumi) AT=124.00n",
+            ".measure tran VJ_SUM FIND v(sumj) AT=124.00n",
             ".end",
             "",
         ]
@@ -105,7 +109,7 @@ def run_code(code: int, root: Path) -> dict[str, float]:
             ["ngspice", "-b", "-o", str(log), str(deck)],
             text=True,
             capture_output=True,
-            timeout=10,
+            timeout=15,
         )
     except subprocess.TimeoutExpired as exc:
         tail = log.read_text(errors="replace")[-4000:] if log.exists() else ""

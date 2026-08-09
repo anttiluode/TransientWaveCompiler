@@ -1,0 +1,28 @@
+name: v09-residual-trim-replay
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/v09_residual_trim_replay.py'
+      - 'docs/CIRCUIT_V09_RESIDUAL_TRIM_REPLAY_PREREG.md'
+      - '.github/workflows/v09-residual-trim-replay.yml'
+  workflow_dispatch:
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Replay spent cohort with 10-percent switch residuals
+        run: python experiments/v09_residual_trim_replay.py
+      - name: Upload replay result
+        uses: actions/upload-artifact@v4
+        with:
+          name: v09-residual-trim-replay
+          path: v09-residual-trim-replay.json

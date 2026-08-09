@@ -1,0 +1,37 @@
+name: published-filter-noisy-measurement-v04
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/generalized_coupling_matrix.py'
+      - 'experiments/published_cross_coupled_filter_v03.py'
+      - 'experiments/published_filter_noisy_measurement_v04.py'
+      - 'docs/BENCHMARK_PUBLISHED_FILTER_NOISY_MEASUREMENT_V04_PREREG.md'
+      - '.github/workflows/published-filter-noisy-measurement-v04.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, C, D]
+        measurement_seed: [4100, 4101, 4102, 4103, 4104]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit generalized coupling matrix
+        run: python -m unittest tests.test_generalized_coupling_matrix -v
+      - name: Tune from eight noisy measured sweeps
+        run: python experiments/published_filter_noisy_measurement_v04.py --start ${{ matrix.start }} --measurement-seed ${{ matrix.measurement_seed }}
+      - name: Upload noisy tuning result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-noisy-v04-${{ matrix.start }}-${{ matrix.measurement_seed }}
+          path: published-filter-noisy-v04-*.json

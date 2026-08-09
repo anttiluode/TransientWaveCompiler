@@ -1,9 +1,11 @@
 """TW-1A physical emulator v0.2: zero-preserving converter semantics.
 
-v0.1 used an endpoint quantizer whose central zero fell between codes.  That
+v0.1 used an endpoint quantizer whose central zero fell between codes. That
 turned disabled edges and nominally zero DAC samples into nonzero signals.
-This module preserves v0.1 for provenance and changes exactly that hardware
-semantic: signed weight, DAC and ADC paths use a mid-tread zero code.
+This module preserves v0.1 for provenance and changes that hardware semantic:
+signed weight, DAC and ADC paths use a mid-tread zero code. The shuffled-credit
+control also shares the exact learner's fixed chip disorder so only credit
+placement differs.
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ Array = np.ndarray
 def signed_midtread_quantize(x: Array, bits: int | None, full_scale: float) -> Array:
     """Symmetric signed quantizer with an exact central zero code.
 
-    Uses integer codes ``-K..K`` where ``K=2^(B-1)-1``.  One two's-complement
+    Uses integer codes ``-K..K`` where ``K=2^(B-1)-1``. One two's-complement
     endpoint is intentionally unused; exact zero/off semantics are more useful
     for a sparse programmable wave mesh than one extra asymmetric code.
     """
@@ -43,9 +45,7 @@ def signed_midtread_quantize(x: Array, bits: int | None, full_scale: float) -> A
     step = fs / float(k)
     code = np.clip(np.rint(x / step), -k, k)
     out = code * step
-    # Make the sparse/off contract explicit even under signed-zero oddities.
-    out = np.where(x == 0.0, 0.0, out)
-    return out
+    return np.where(x == 0.0, 0.0, out)
 
 
 def signed_midtread_mu_law_quantize(
@@ -114,7 +114,12 @@ def run_closed_loop_training(
     """Run the v0.2 four-pass echo learner and norm-matched shuffle control."""
     cfg = TW1APhysicalTileConfig() if config is None else config
     exact_tile = TW1APhysicalTile(manifest, cfg)
-    shuffle_tile = exact_tile.clone(seed=cfg.seed + 100_003)
+
+    # Same programmed coefficients and same fixed spatial disorder. The shuffle
+    # arm never executes a noisy reverse experiment; it only receives the exact
+    # arm's measured credits permuted in location, so sharing this seed makes
+    # the control differ only in credit placement.
+    shuffle_tile = exact_tile.clone(seed=cfg.seed)
 
     exact_interp = MicrocodeInterpreter(exact_tile)
     shuffle_interp = MicrocodeInterpreter(shuffle_tile)

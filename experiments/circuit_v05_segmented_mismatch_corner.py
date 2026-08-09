@@ -19,12 +19,13 @@ SEEDS = list(range(1700, 1710))
 
 def config_for(seed: int) -> TW1ASegmentedMismatchConfig:
     base = v05_config_for(seed)
-    return TW1ASegmentedMismatchConfig(
-        **base.__dict__,
+    kwargs = dict(base.__dict__)
+    kwargs.update(
         edge_unit_cap_sigma=0.03,
         edge_cunit_over_csum=1e-3,
         seed=130_000 + seed,
     )
+    return TW1ASegmentedMismatchConfig(**kwargs)
 
 
 def main() -> None:

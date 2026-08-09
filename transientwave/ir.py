@@ -15,9 +15,15 @@ class StateSpec:
 @dataclass(frozen=True)
 class DynamicsSpec:
     form: str
+    # damped_second_order
     a: float | None = None
     M: tuple[tuple[float, ...], ...] | None = None
+    # reversible_second_order
     Q: tuple[tuple[float, ...], ...] | None = None
+    # continuous_damped_wave: x_ddot + gamma*x_dot + H*x = source
+    gamma: float | None = None
+    H: tuple[tuple[float, ...], ...] | None = None
+    integration: str = "semi_implicit_euler"
 
 
 @dataclass(frozen=True)
@@ -45,7 +51,8 @@ class TrainableEdgeSpec:
     j: int
     minimum: float
     maximum: float
-    matrix_scale: float
+    scale: float
+    parameter_space: str
     group: str = "default"
 
 
@@ -121,6 +128,13 @@ def program_from_dict(d: dict[str, Any]) -> Program:
         dynamics = DynamicsSpec(form=form, a=float(dd["a"]), M=_matrix(dd["M"], "dynamics.M"))
     elif form == "reversible_second_order":
         dynamics = DynamicsSpec(form=form, Q=_matrix(dd["Q"], "dynamics.Q"))
+    elif form == "continuous_damped_wave":
+        dynamics = DynamicsSpec(
+            form=form,
+            gamma=float(dd["gamma"]),
+            H=_matrix(dd["H"], "dynamics.H"),
+            integration=str(dd.get("integration", "semi_implicit_euler")),
+        )
     else:
         raise ValueError(f"unsupported dynamics form {form!r}")
 
@@ -150,13 +164,24 @@ def program_from_dict(d: dict[str, Any]) -> Program:
 
     edges: list[TrainableEdgeSpec] = []
     for ed in d.get("trainable_edges", []):
+        if "stiffness_scale" in ed:
+            scale = float(ed["stiffness_scale"])
+            parameter_space = "stiffness_H"
+        elif "matrix_scale" in ed:
+            scale = float(ed["matrix_scale"])
+            parameter_space = "recurrence_M"
+        else:
+            raise ValueError(
+                f"trainable edge ({ed.get('i')},{ed.get('j')}) needs matrix_scale or stiffness_scale"
+            )
         edges.append(
             TrainableEdgeSpec(
                 i=int(ed["i"]),
                 j=int(ed["j"]),
                 minimum=float(ed.get("min", float("-inf"))),
                 maximum=float(ed.get("max", float("inf"))),
-                matrix_scale=float(ed["matrix_scale"]),
+                scale=scale,
+                parameter_space=parameter_space,
                 group=str(ed.get("group", "default")),
             )
         )

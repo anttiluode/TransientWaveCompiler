@@ -1,0 +1,66 @@
+* TW-1A v0.5 Gate C0a: phase-history symmetry experiment
+*
+* This is intentionally process-independent.  The sample switch is modeled by
+* a finite Ron and one dynamic capacitor so the 1.2 ns aperture is only about
+* 70% settled (tau ~= 1 ns).  Two otherwise identical paths are compared:
+*
+*   edge_seq : initial reset only; B inherits A's dynamic-node history
+*   edge_sym : initial reset + inter-lane reset; B starts from same common mode
+*
+* The coefficient itself is represented as unity in this timing-only deck.  A
+* later C0b deck replaces the switch/RC abstraction with the candidate signed
+* switched-capacitor MDAC.
+
+.option numdgt=12
+
+.param VDIFF=0.4
+.param CEDGE=1p
+.param RON_SAMPLE=1k
+.param RON_RESET=10
+
+* Held differential edge inputs for the two reverse contexts.
+VINA in_a 0 {VDIFF}
+VINB in_b 0 {-VDIFF}
+
+* Non-overlapping controls.  Both sample apertures are 1.2 ns.
+* Initial reset: 0.0--0.45 ns
+VRESET_INIT rst_i 0 PWL(0n 1 0.45n 1 0.451n 0 4n 0)
+* Inter-lane reset: 1.75--2.15 ns (v0.5 path only)
+VRESET_AB rst_ab 0 PWL(0n 0 1.749n 0 1.75n 1 2.15n 1 2.151n 0 4n 0)
+* A sample: 0.50--1.70 ns
+VPHIA phi_a 0 PWL(0n 0 0.499n 0 0.50n 1 1.70n 1 1.701n 0 4n 0)
+* B sample: 2.20--3.40 ns
+VPHIB phi_b 0 PWL(0n 0 2.199n 0 2.20n 1 3.40n 1 3.401n 0 4n 0)
+
+.model SAMP SW(Ron={RON_SAMPLE} Roff=1e15 Vt=0.5 Vh=0)
+.model RST  SW(Ron={RON_RESET}  Roff=1e15 Vt=0.5 Vh=0)
+
+* ---------------------------------------------------------------------------
+* Old sequential-history path: reset before A, no reset between A and B.
+* ---------------------------------------------------------------------------
+CSEQ edge_seq 0 {CEDGE}
+RSEQLEAK edge_seq 0 1e15
+SSEQRI edge_seq 0 rst_i 0 RST
+SSEQ_A edge_seq in_a phi_a 0 SAMP
+SSEQ_B edge_seq in_b phi_b 0 SAMP
+
+* ---------------------------------------------------------------------------
+* v0.5 phase-symmetric path: same initial reset, plus identical-history reset
+* before lane B.
+* ---------------------------------------------------------------------------
+CSYM edge_sym 0 {CEDGE}
+RSYMLEAK edge_sym 0 1e15
+SSYMRI edge_sym 0 rst_i 0 RST
+SSYMRB edge_sym 0 rst_ab 0 RST
+SSYM_A edge_sym in_a phi_a 0 SAMP
+SSYM_B edge_sym in_b phi_b 0 SAMP
+
+.tran 1p 4n
+
+* Sample just before each aperture closes.
+.measure tran A_SEQ FIND v(edge_seq) AT=1.699n
+.measure tran B_SEQ FIND v(edge_seq) AT=3.399n
+.measure tran A_SYM FIND v(edge_sym) AT=1.699n
+.measure tran B_SYM FIND v(edge_sym) AT=3.399n
+
+.end

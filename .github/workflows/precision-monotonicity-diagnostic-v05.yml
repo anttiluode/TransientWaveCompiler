@@ -1,0 +1,25 @@
+name: precision-monotonicity-diagnostic-v05
+
+on:
+  push:
+    paths:
+      - "transientwave/precision_monotonicity_diagnostic_v05.py"
+      - "transientwave/emulator_v05.py"
+      - ".github/workflows/precision-monotonicity-diagnostic-v05.yml"
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: python -m transientwave.precision_monotonicity_diagnostic_v05
+      - uses: actions/upload-artifact@v4
+        with:
+          name: precision-monotonicity-diagnostic-v05
+          path: runs/precision_monotonicity_diagnostic_v05.json

@@ -13,7 +13,7 @@ from transientwave.order_benchmarks import compile_temporal_order_task
 
 TASK_SEED = 2400
 IDEAL_IMPROVEMENT = 0.864382
-FABRICATION_SEEDS = [2400, 2401, 2402, 2403, 2404]
+FABRICATION_SEEDS = [2400, 3000, 3001, 3002, 3003]
 DYNAMIC_SEEDS = [8000, 8001, 8002, 8003, 8004]
 
 
@@ -80,7 +80,7 @@ def main():
     print("summary", summary, flush=True)
     out = {
         "experiment": "v09-fixed-task-fabrication-dynamic-factorial",
-        "preregistration": "docs/BENCHMARK_V09_FIXED_TASK_FACTORIAL_PREREG.md",
+        "preregistration": "docs/BENCHMARK_V09_SEED_AXIS_FACTORIAL_PREREG.md",
         "status": "diagnostic",
         "task_seed": TASK_SEED,
         "ideal_improvement": IDEAL_IMPROVEMENT,

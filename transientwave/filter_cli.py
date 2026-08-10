@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .filter_tuning import parse_filter_spec, tune_filter_spec
+from .filter_tuning import (
+    parse_filter_spec,
+    parse_measurement_nuisance,
+    tune_filter_spec,
+)
 
 
 def _load_json(path: str) -> dict[str, Any]:
@@ -20,12 +24,24 @@ def _summary(result: dict[str, Any]) -> str:
     names = result["parameter_order"]
     values = result["final_values"]
     pairs = ", ".join(f"{name}={value:+.8g}" for name, value in zip(names, values))
-    return (
-        f"{result['name']}: loss {result['initial_loss']:.6e} -> "
-        f"{result['final_loss']:.6e} "
-        f"({result['loss_reduction_factor']:.3e}x reduction)\n"
-        f"{pairs}"
-    )
+    lines = [
+        (
+            f"{result['name']}: loss {result['initial_loss']:.6e} -> "
+            f"{result['final_loss']:.6e} "
+            f"({result['loss_reduction_factor']:.3e}x reduction)"
+        ),
+        pairs,
+    ]
+    nuisance = result.get("nuisance", {})
+    if nuisance.get("enabled"):
+        nuisance_pairs = ", ".join(
+            f"{item['name']}={item['final']:+.8g}"
+            for item in nuisance.get("parameters", [])
+            if item.get("free")
+        )
+        if nuisance_pairs:
+            lines.append(f"nuisance: {nuisance_pairs}")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,9 +73,13 @@ def main(argv: list[str] | None = None) -> int:
         spec = _load_json(args.spec)
         if args.validate_only:
             nodes, knobs, omega, _s11, _s21, opt = parse_filter_spec(spec)
+            nuisance = parse_measurement_nuisance(spec)
+            free_nuisance = sum(item.free for item in nuisance.ordered())
+            model = "joint-nuisance" if nuisance.enabled else "lossless"
             print(
                 f"valid explicit-port filter spec: nodes={nodes}, "
-                f"knobs={len(knobs)}, samples={len(omega)}, iterations={opt.iterations}"
+                f"knobs={len(knobs)}, samples={len(omega)}, iterations={opt.iterations}, "
+                f"measurement_model={model}, free_nuisance={free_nuisance}"
             )
             return 0
 

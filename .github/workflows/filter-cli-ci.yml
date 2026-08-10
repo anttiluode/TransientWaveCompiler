@@ -17,6 +17,7 @@ on:
       - 'transientwave/topology_discovery.py'
       - 'transientwave/multistate_filter.py'
       - 'transientwave/identifiability.py'
+      - 'transientwave/topology_gauge.py'
       - 'tests/test_filter_tuning.py'
       - 'tests/test_filter_units.py'
       - 'tests/test_filter_analysis.py'
@@ -25,6 +26,7 @@ on:
       - 'tests/test_topology_discovery.py'
       - 'tests/test_multistate_filter.py'
       - 'tests/test_identifiability.py'
+      - 'tests/test_topology_gauge.py'
       - '.github/workflows/filter-cli-ci.yml'
   workflow_dispatch:
 
@@ -48,6 +50,7 @@ jobs:
           tests.test_topology_discovery
           tests.test_multistate_filter
           tests.test_identifiability
+          tests.test_topology_gauge
           tests.test_generalized_coupling_matrix
           tests.test_coupled_resonator_filter
           -v

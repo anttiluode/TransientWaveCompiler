@@ -11,9 +11,9 @@ The compiler/tuner is now the application mainline. The chip is parked as a rese
 
 ---
 
-## Current application: turn filter tuning into diagnosis
+## Current application: physical diagnosis from complex S-parameters
 
-Given a filter topology and complex measured `S11` / `S21`, `twc-filter` estimates the physical coupling matrix rather than merely searching for a trace match.
+Given a declared reciprocal filter topology and complex measured `S11` / `S21`, `twc-filter` estimates the physical coupling matrix rather than merely searching for a trace match.
 
 For the explicit source–resonator–load model,
 
@@ -29,11 +29,15 @@ and every physical knob has an exact inverse-matrix derivative
 d A^-1 / dp = -A^-1 (dA/dp) A^-1.
 ```
 
-So a diagonal knob can mean “this resonator is off frequency” and an off-diagonal symmetric knob can mean “this reciprocal coupling is wrong.”
+A diagonal knob can represent resonator detuning. An off-diagonal symmetric knob represents a reciprocal coupling. Optional `nominal` values turn the fitted matrix into fitted-minus-design correction rows.
 
-### The result that matters most
+This is **not** a claim that coupling-matrix extraction or diagnosis was invented here. Those are established fields; see [`docs/FILTER_PRIOR_ART_AND_CLAIM_BOUNDARY.md`](docs/FILTER_PRIOR_ART_AND_CLAIM_BOUNDARY.md).
 
-The v0.5 benchmark deliberately mixed the hidden seven-knob published cross-coupled matrix with:
+---
+
+## The strongest current positive result: nuisance must not masquerade as physics
+
+The v0.5 benchmark deliberately mixed a hidden seven-knob published cross-coupled matrix with:
 
 ```text
 uniform resonator loss
@@ -51,9 +55,11 @@ NAIVE  lossless matrix-only hidden-matrix recovery    0/15
 AWARE  matrix + loss + phase nuisance recovery       15/15
 ```
 
-The important lesson is not another small RMSE number:
+The supported lesson is narrow and concrete:
 
-> **Measurement-chain physics must be modeled separately, or reference-plane/calibration error can be converted into false physical coupling corrections.**
+> **Under this frozen corruption, omitting supported measurement/model nuisance caused the physical matrix to absorb the mismatch; joint physical+nuisance estimation recovered the hidden matrix on all 15 cells.**
+
+This does not imply that all previous extraction methods require separate de-embedding. Some published vector-fitting approaches explicitly avoid that requirement.
 
 See [`docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md`](docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md).
 
@@ -61,30 +67,45 @@ See [`docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md`](docs/B
 
 ## Real measurement path
 
-The active branch now accepts ordinary two-port Touchstone data.
+The active branch accepts ordinary two-port Touchstone data.
 
 ```bash
 pip install -e .
 
 twc-filter inspect-s2p measured.s2p
+```
 
+For ordinary narrow-band coupled-resonator work, the preferred preparation path is the classical bandpass normalization
+
+```text
+Omega = (f0/BW) * (f/f0 - f0/f)
+```
+
+with an explicit sign convention:
+
+```bash
 twc-filter prepare-s2p topology.json measured.s2p \
   --center-hz 2450000000 \
-  --scale-hz 50000000 \
+  --bandwidth-hz 100000000 \
   -o measurement.json
 
 twc-filter fit measurement.json -o tuned.json
 ```
 
-The importer preserves physical frequency in hertz and records the explicit normalization
+A linear mapping remains available when that is the coordinate actually intended by the model:
 
-```text
-Omega = (frequency_hz - center_hz) / scale_hz.
+```bash
+twc-filter prepare-s2p topology.json measured.s2p \
+  --center-hz 2450000000 \
+  --scale-hz 50000000 \
+  -o measurement.json
 ```
 
-It does **not** silently guess the coupling-matrix frequency normalization.
+The importer preserves the physical frequency axis and records the chosen normalization instead of silently guessing it.
 
-The two-port parser supports the practical first-VNA subset of Touchstone 1.x/2.0, `RI` / `MA` / `DB`, and both two-port data orders.
+The two-port reader supports the practical first-VNA subset of Touchstone 1.x/2.0, `RI` / `MA` / `DB`, both two-port data orders, and a common real reference impedance.
+
+A ready starting topology is [`examples/published_filter_vna_topology.json`](examples/published_filter_vna_topology.json). It includes the published cross-coupled structure, four diagonal resonator-detuning knobs, nominal design values, and bounded nuisance parameters.
 
 See [`docs/FILTER_TUNING.md`](docs/FILTER_TUNING.md).
 
@@ -92,7 +113,7 @@ See [`docs/FILTER_TUNING.md`](docs/FILTER_TUNING.md).
 
 ## Joint physical + nuisance fit
 
-A topology JSON may optionally expose bounded nuisance variables alongside matrix knobs:
+A topology JSON may expose bounded nuisance variables alongside matrix knobs:
 
 ```json
 "nuisance": {
@@ -106,10 +127,11 @@ A topology JSON may optionally expose bounded nuisance variables alongside matri
 
 Missing nuisance fields remain fixed at zero, so older lossless specifications are backward compatible.
 
-The result separates:
+The output separates:
 
 ```text
 matrix                 inferred physical coupling matrix
+diagnosis              optional fitted-minus-nominal corrections
 physical_s11 / s21     inferred filter before phase nuisance
 fitted_s11 / s21       complete predicted measured trace
 nuisance               inferred loss and reference-plane variables
@@ -126,32 +148,44 @@ v0.3  published 6x6 cross-coupled topology             5/5 exact
 v0.4  zero-mean repeated complex measurement noise    15/15 robust
 v0.5  systematic loss + reference-plane nuisance      15/15 aware
                                                       0/15 naive matrix recovery
+v0.6  one hidden parasitic reciprocal edge            12/15 top-1 + recovery
+                                                      PRIMARY DISCOVERY FAIL
 ```
 
-The new product surface is covered by both the repository-wide test suite and a dedicated `filter-cli-ci` gate, including the nuisance gradients and Touchstone preparation path.
+The v0.6 failure is deliberate and retained. Four of five frozen hidden-edge locations were ranked #1 and recovered across every start. One hidden load-side edge, `(2,5)=-0.025`, ranked **8, 8, 7** and failed across all starts, so the preregistered top-3 clause failed.
+
+See [`docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_RESULT.md`](docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_RESULT.md).
 
 ---
 
-## Next structural question: is the topology itself wrong?
+## Topology diagnosis: what v0.6 actually taught us
 
-The current fitter assumes that the declared reciprocal graph is correct. That is the next assumption worth attacking.
-
-Suppose the intended matrix omits one weak physical coupling:
+The first idea was simple:
 
 ```text
-known topology + unknown parasitic reciprocal edge
+fit wrong declared topology
+-> hold it fixed
+-> compute exact derivative of every absent reciprocal edge
+-> take one bounded probe per edge
+-> rank by actual probe residual
 ```
 
-A constrained fit cannot explain that edge away perfectly. The residual should contain a direction in response space corresponding to the missing symmetric matrix stamp.
+That works extremely well when the wrong-topology fit stays near the intended physical matrix. It fails when the wrong model has already compensated for the missing interaction by moving its allowed physical and nuisance parameters.
 
-The next experiment asks whether TWC can:
+The exact derivative is still correct at that compensated point. The point is simply no longer a reliable place from which to infer the omitted graph edge.
 
-1. fit the declared topology and nuisance;
-2. score absent reciprocal edges directly from the structured complex residual and exact sensitivity;
-3. rank the true missing edge first;
-4. add it and jointly recover both the intended matrix and parasitic strength.
+So **automatic parasitic topology discovery is not a qualified public feature yet.** The scorer remains research code in `transientwave/topology_discovery.py`.
 
-That would move the tool from **parameter diagnosis** toward **topology diagnosis**.
+The next estimator is candidate-conditioned model comparison:
+
+```text
+for each absent edge c:
+    add c
+    jointly refit matrix + c + nuisance
+    compare final complex residual/model score
+```
+
+The failed `(2,5)` cell is useful as a post-hoc mechanism microscope. A qualifying next benchmark must use fresh hidden cases/seeds and be preregistered.
 
 ---
 
@@ -207,28 +241,31 @@ transientwave/
   measurement_aware_filter.py      loss + S11/S21 phase nuisance model
   filter_tuning.py                 bounded physical+nuisance optimizer
   filter_cli.py                    twc-filter command line
-  touchstone.py                     dependency-free two-port measurement reader
-
-  circuit_emulator_v09_*.py        controlled hardware stochastic emulation
-  kick_drift.py                     kick-drift representation
+  touchstone.py                     two-port Touchstone + Omega normalization
+  topology_discovery.py             experimental missing-edge scorer
 
 experiments/
   published_*filter*.py             external-domain filter evidence ladder
   v09_*.py / v10_*.py               stochastic-adjoint and forward-estimator tests
 
+examples/
+  published_filter_vna_topology.json  starting point for a real VNA trace
+
 spice/                               circuit rejection/pass ladder
-docs/                                preregistrations, results, hardware status, tuner guide
-tests/                               compiler, circuit, filter, nuisance and Touchstone tests
+docs/                                preregistrations, results, prior-art boundary, tuner guide
+tests/                               compiler, circuit, filter, nuisance, Touchstone and topology tests
 ```
 
-Failed preregistered gates are intentionally retained. In this repository they are part of the design record: many of the useful simplifications came from identifying which assumption should be deleted rather than merely tightening tolerances.
+Failed preregistered gates are intentionally retained. In this repository they are part of the design record: many useful simplifications came from identifying which assumption should be deleted rather than merely tightening tolerances.
 
 ---
 
-## Prior-art boundary
+## Current claim boundary
 
-TWC does **not** claim invention of adjoint optimization, coupling-matrix synthesis/extraction, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor damping transforms, physical wave computing, or trainable scattering media.
+TWC does **not** claim invention of adjoint optimization, coupling-matrix synthesis/extraction, computer-aided coupling-matrix diagnosis, lossy extraction, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor damping transforms, physical wave computing, or trainable scattering media.
 
-The narrower compiler/engineering contribution being explored is:
+The narrower compiler/engineering contribution being tested is:
 
-> **Represent reciprocal systems as constrained sparse symmetric operators, preserve exact sensitivity structure, jointly separate physical parameters from supported measurement nuisance, and make residual model mismatch explicit enough to diagnose when the declared physics itself is wrong.**
+> **Represent reciprocal systems as constrained sparse symmetric operators, preserve exact sensitivity structure, jointly separate supported measurement nuisance from physical parameters, expose fitted-minus-design diagnosis, and make residual model mismatch explicit enough to test when the declared physics itself is wrong.**
+
+The next decisive application result is no longer synthetic: it is a real measured filter whose deliberate physical perturbations are diagnosed correctly and reproducibly.

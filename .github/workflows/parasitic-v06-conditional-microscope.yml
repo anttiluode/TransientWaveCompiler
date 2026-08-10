@@ -1,0 +1,60 @@
+name: parasitic-v06-conditional-microscope
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/published_filter_parasitic_v06_conditional_microscope.py'
+      - 'experiments/summarize_parasitic_v06_conditional_microscope.py'
+      - '.github/workflows/parasitic-v06-conditional-microscope.yml'
+
+jobs:
+  candidate:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, C, D]
+        candidate: ['02', '03', '04', '13', '15', '24', '25', '35']
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Conditional candidate refit
+        run: >-
+          python experiments/published_filter_parasitic_v06_conditional_microscope.py
+          --start ${{ matrix.start }}
+          --candidate ${{ matrix.candidate }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v06-conditional-${{ matrix.start }}-${{ matrix.candidate }}
+          path: v06-conditional-*.json
+
+  aggregate:
+    if: always()
+    needs: candidate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download cells
+        uses: actions/download-artifact@v4
+        with:
+          pattern: v06-conditional-*
+          path: results
+          merge-multiple: true
+      - name: Aggregate
+        run: >-
+          python experiments/summarize_parasitic_v06_conditional_microscope.py
+          results
+          --output v06-conditional-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v06-conditional-summary
+          path: v06-conditional-summary.json

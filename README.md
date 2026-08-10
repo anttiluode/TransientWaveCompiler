@@ -1,196 +1,110 @@
 # TransientWaveCompiler
 
-**A compiler and reference architecture for finite-time dissipative wave computation on an echo-trainable physical mesh.**
+**A compiler/tuning toolkit for sparse reciprocal wave systems, with a separate mixed-signal research line for transient-wave computation.**
 
-TransientWaveCompiler (TWC) grows out of the GeometricNeuronPlusField experiments. The central engineering idea is not that physical adjoints, wave interference, Hamiltonian echo learning, or damping factorizations are individually new. They are not. The project asks whether these pieces can be assembled into a practical compiler target for **transient dissipative computation**:
+TransientWaveCompiler (TWC) grew out of [GeometricNeuronPlusField](https://github.com/anttiluode/GeometricNeuronPlusField). The project has now separated into two experimentally distinct tracks:
 
-```text
-user dynamical program
-    |
-    v
-finite-time damped reciprocal system
-    |
-    | conformal / damping-gauge compile
-    v
-reversible second-order wave program
-    |
-    v
-TW-1 physical mesh
-    |
-    +--> forward computation
-    |
-    +--> terminal time mirror
-    |
-    +--> returned adjoint / error wave
-    |
-    +--> local +/- energy interference
-    |
-    `--> one scalar credit per tunable edge
-```
+1. **TWC compiler / reciprocal-system tuner** — diagnose and optimize sparse symmetric wave and filter operators on an ordinary computer.
+2. **TW-1A mixed-signal research backend** — investigate whether a reciprocal physical wave body can regenerate transient history and expose local training credit without storing an `O(N*T)` trajectory tape.
 
-The key memory goal is:
+The compiler/tuner is now the application mainline. The chip remains a research result, including an important negative result that is worth preserving rather than hiding.
+
+> **Active development:** [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08)
+
+---
+
+## Current headline: filter tuning becomes diagnosis instead of search
+
+The current filter layer fits a constrained reciprocal coupling matrix directly to complex measured `S11` and `S21` using exact inverse-matrix derivatives:
 
 ```text
-ordinary BPTT-like implementation:   O(N*T) trajectory memory
-TW echo implementation:              O(N) live physical state
-                                     + O(E) scalar credit accumulators
+A(Omega) = M + Omega U - j q
+S11      = 1 + 2j [A^-1]_(S,S)
+S21      = -2j [A^-1]_(L,S)
+
+d A^-1 / dp = -A^-1 (dA/dp) A^-1
 ```
 
-The body regenerates the required forward history dynamically during an echo instead of reading it from a stored tape.
+A diagonal matrix knob is a resonator-frequency correction. An off-diagonal symmetric knob is a reciprocal coupling correction. The goal is not merely to make the trace look right, but to recover **which physical resonators and couplings are wrong**.
 
-## TW-1 v0.1
-
-TW-1 is the first reference chip target. It is deliberately specified as a **clocked mixed-signal reciprocal wave mesh** rather than assuming difficult photonic hardware from day one.
-
-Each wave node contains two analog state registers representing `z[n]` and `z[n-1]`. Each reciprocal edge contains a programmable symmetric coupling. A clocked local update realizes
+The strongest current benchmark deliberately adds systematic measurement/model mismatch:
 
 ```text
-z[n+1] = Q z[n] - z[n-1] + B u[n]
+published seven-knob cross-coupled filter
++ uniform resonator loss
++ unknown S11 phase offset and slope
++ unknown S21 phase offset and slope
++ amplitude/phase measurement noise
 ```
 
-where `Q` is sparse and symmetric.
-
-A compiler may start from the uniformly damped recurrence
+Fitting only the physical matrix gives:
 
 ```text
-psi[n+1] = M psi[n] - a psi[n-1] + dt^2 s[n]
+NAIVE hidden-matrix recovery   0/15
 ```
 
-and, for scalar `a > 0`, apply
+Jointly fitting the physical matrix and measurement nuisance gives:
 
 ```text
-r = sqrt(a)
-psi[n] = r^n z[n]
-Q = M / r
-u[n] = dt^2 r^(-(n+1)) s[n]
+AWARE systematic recovery     15/15
 ```
 
-to obtain the reversible TW-1 recurrence exactly.
+That is the useful product-side result: **measurement-chain physics must be separated from physical coupling corrections, or calibration/reference-plane error can be converted into false tuning instructions.**
 
-Readout objectives are transformed by the same known boundary-time envelopes. The transformation moves intended uniform dissipation out of the distributed body and into compiler-generated source/readout schedules.
+Read the frozen result:
 
-## Why a clocked analog mesh first?
+- [Systematic nuisance benchmark v0.5](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md)
+- [`twc-filter` documentation](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_TUNING.md)
 
-It gives the project an exact hardware contract:
+The next practical gates are real `.s2p` Touchstone ingestion, then real measured hardware, followed by **unknown parasitic topology discovery** rather than another clean synthetic matrix.
 
-- local propagation only;
-- sparse reciprocal geometry;
-- physical state evolves in parallel;
-- no digital matrix-vector multiply is required during a wave step;
-- the exact second-order recurrence is explicit;
-- time reversal can be implemented as a state operation rather than an idealized optical phase-conjugation assumption;
-- the same compiler IR can later target continuous LC, microwave, acoustic, mechanical, or photonic wave bodies.
+---
 
-## Training primitive
+## The hardware result is also useful — including the failure
 
-For a trainable edge `(i,j)`, define local edge fields
+The TW-1A work produced concrete recurrence transforms, reciprocal rank-one edge lowering, switched-cap circuit simplifications, ngspice pass/fail gates, common/difference reverse storage, and a kick-drift representation.
+
+But the attractive small-cap stochastic on-device adjoint did not survive controlled task × fabrication × dynamic-noise tests.
+
+At one fixed parameter point, even averaging **1024** independently noisy physical gradients left a median cosine of only **0.280** to the clean gradient, with evidence of a bias component.
+
+The important boundary is:
+
+> **A stochastic physical adjoint is not automatically an adjoint of a stochastic forward history.**
+
+The deterministic echo algebra can be correct while the reverse traversal still fails to adjoint the particular forward trajectory when the two traversals receive different stochastic perturbation histories. More capacitance and brute-force averaging did not rescue the attractive operating point.
+
+That result parks the chip honestly without discarding the circuit work.
+
+Read the evidence map:
+
+- [Current hardware status](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/HARDWARE_STATUS_2026-08-09.md)
+- [Fixed-theta gradient microscope](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/BENCHMARK_V09_FIXED_THETA_GRADIENT_SNR_RESULT.md)
+
+---
+
+## Why these two tracks still belong together
+
+They share the same structural object:
 
 ```text
-Delta w = w_i - w_j
-Delta a = a_i - a_j
+parameterized sparse symmetric operator
+        |
+        +-- reciprocal local edge stamps
+        +-- constrained topology
+        +-- exact local derivatives
+        +-- forward response
+        `-- inverse / adjoint sensitivity
 ```
 
-where `w` is the dynamically retraced forward field and `a` is the returned adjoint/error field.
+The physical backend asks whether that structure can be exploited directly in matter. The compiler/tuner asks what can already be done reliably on a computer with measured reciprocal systems.
 
-Two local energy measurements give
+The second question is currently producing the stronger application.
 
-```text
-E+ = sum_t |Delta w + Delta a|^2
-E- = sum_t |Delta w - Delta a|^2
+---
 
-credit = (E+ - E-) / 4
-```
+## Repository status
 
-which is the broadband local overlap required by the edge gradient, up to the compiler-known parameterization scale/sign.
+`main` is now the stable public landing page. The active research/compiler branch is [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08), which contains the current tuner, benchmarks, circuit research record, and executable tests.
 
-The gradient accumulation cost is independent of the transient length and does not require a local FFT or complex multiplier bank.
-
-## Compiler contract
-
-TWC compiles a `WaveProgram` through these stages:
-
-1. **Normalize** a finite-time reciprocal dynamical model into a second-order recurrence.
-2. **Factor damping** when legal and produce boundary gain envelopes.
-3. **Check reversibility/stability** of the compiled operator.
-4. **Place** graph nodes onto physical wave cells.
-5. **Route** symmetric couplings onto reciprocal programmable edges.
-6. **Schedule ports** for forward drive, readout/error injection, echo recreation and +/- measurements.
-7. **Emit calibration requirements**: gain range, timing, residual loss tolerance and pass-drift budget.
-8. **Emit a training protocol** containing local credit scale factors and update constraints.
-
-The compiler refuses designs that violate hard backend constraints instead of silently producing an unstable body.
-
-Strict `twc-tw1a` output now also carries a machine-readable `hardware_contract` block. The current physical semantics are **one reciprocal rank-one edge cell / one programmable coefficient / one local credit accumulator**, with an exact zero/off code. The block distinguishes per-program converter spans from the architecture-wide damping-gauge promise and records the current mixed-signal evidence without turning benchmark results into hard universal compile errors.
-
-## Current mixed-signal result
-
-The first fully preregistered simultaneous noisy operating point has now passed on ten untouched irregular temporal-order tasks using the corrected rank-one edge-cell emulator:
-
-```text
-Q / drive DAC / sense ADC     8 / 8 / 8
-mean leakage per tick          0.0005
-leakage CV                     0.50
-mirror gain error              15%
-PLUS/MINUS differential drift  10 ppm RMS
-zero-mean local credit noise   25%
-local credit DC offset         0.015%
-state noise                    5e-9 of full scale RMS/tick
-```
-
-All 10/10 learners improved by at least +0.10 normalized temporal-order contrast and all 10/10 beat a norm-matched shuffled-credit control.
-
-The important caveat is that the 10-ppm number is a **within-gradient differential-stability** result, not necessarily an absolute fabrication-accuracy limit. Experiments in which one drifting reciprocal Q is held coherent across the complete physical gradient evaluation are far more tolerant of absolute Q variation, but an absolute coherent-drift boundary is not yet confirmed.
-
-See [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current evidence map and exact caveats.
-
-## Repository layout
-
-```text
-docs/
-  ARCHITECTURE.md                 TW-1 machine architecture
-  COMPILER_IR.md                  WaveProgram intermediate representation
-  TRAINING_PROTOCOL.md            echo/adjoint training sequence
-  HARDWARE_TILE.md                node, edge, port and local-credit circuits
-  HARDWARE_STATUS_2026-08-09.md   current mixed-signal evidence and limits
-
-transientwave/
-  ir.py                           typed compiler IR
-  compiler.py                     damped -> reversible compilation
-  backend.py                      strict 8x8 TW-1A physical backend
-  physical.py                     TW-1A lowering/routing + hardware contract
-  hardware_contract.py            dynamic-range and hardware-profile report
-  emulator_v05.py                 rank-one edge-cell mixed-signal emulator
-  cli.py                          command-line compiler
-
-examples/
-  three_node.json                 minimal compilable wave program
-
-tests/
-  test_compiler.py                algebra and rejection tests
-  test_hardware_contract.py       converter-budget and contract tests
-  test_emulator_v05.py            rank-one edge-cell hardware semantics
-```
-
-## Prior-art boundary
-
-This repository does **not** claim invention of:
-
-- adjoint optimization;
-- in-situ photonic backpropagation / local interference gradients;
-- Hamiltonian Echo Backpropagation;
-- recurrent Hamiltonian echo learning;
-- integrating-factor or conformally symplectic damping transforms;
-- physical wave computing;
-- trainable scattering media.
-
-The research question is narrower:
-
-> Can a useful class of finite-time dissipative reciprocal computations be compiled into stable echo-compatible wave coordinates so that the physical body regenerates transient history and exposes trainable broadband local credit with constant-pass, local measurements?
-
-## Status
-
-`v0.1` is a **reference architecture and executable algebraic compiler**, not a fabricated chip. The compiler algebra, strict 8x8 backend, microcode, rank-one mixed-signal emulator, temporal-order credit benchmark, and hardware-contract reporting are executable and covered by CI.
-
-The next hardware question is no longer simply "how many bits?" The current results say the critical acquisition requirement is that all measurements combined into one physical gradient refer to a sufficiently coherent reciprocal operator realization. A practical chopped/simultaneous differential implementation of that coherence requirement remains an engineering target.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the machine spec and [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md) for the current hardware evidence.
+A future promotion to `main` should be a curated compiler release rather than a blind merge of the full research history.

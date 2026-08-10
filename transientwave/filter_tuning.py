@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from .coupled_resonator_filter import MatrixParameter, matrix_from_parameters
+from .filter_units import resonator_frequency_diagnosis
 from .generalized_coupling_matrix import (
     complex_response_loss_and_gradient,
     generalized_scattering,
@@ -158,20 +159,17 @@ def parse_measurement_nuisance(spec: Mapping[str, Any]) -> MeasurementNuisanceCo
     )
 
 
-def _measurement_scale_hz(spec: Mapping[str, Any]) -> float | None:
+def _measurement_omega_mapping(spec: Mapping[str, Any]) -> dict[str, Any] | None:
     source = spec.get("measurement_source")
     if not isinstance(source, Mapping):
         return None
     mapping = source.get("omega_mapping")
-    if not isinstance(mapping, Mapping) or str(mapping.get("mode", "")) != "linear":
+    if not isinstance(mapping, Mapping):
         return None
-    try:
-        scale_hz = float(mapping["scale_hz"])
-    except (KeyError, TypeError, ValueError):
+    mode = str(mapping.get("mode", ""))
+    if mode not in {"linear", "bandpass"}:
         return None
-    if not np.isfinite(scale_hz) or scale_hz == 0.0:
-        return None
-    return scale_hz
+    return dict(mapping)
 
 
 def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
@@ -280,7 +278,11 @@ def _run_adam(
     return x, float(initial_loss), initial_grad, float(final_loss), final_grad, loss_trace
 
 
-def _diagnosis(knobs: Sequence[FilterKnob], fitted: np.ndarray, scale_hz: float | None) -> list[dict[str, Any]]:
+def _diagnosis(
+    knobs: Sequence[FilterKnob],
+    fitted: np.ndarray,
+    omega_mapping: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for knob, value in zip(knobs, fitted):
         if knob.nominal is None:
@@ -289,20 +291,26 @@ def _diagnosis(knobs: Sequence[FilterKnob], fitted: np.ndarray, scale_hz: float 
         relative_percent = None
         if abs(knob.nominal) > 1e-15:
             relative_percent = float(100.0 * delta / knob.nominal)
-        frequency_equivalent_hz = None if scale_hz is None else float(delta * scale_hz)
-        rows.append(
-            {
-                "name": knob.name,
-                "i": int(knob.i),
-                "j": int(knob.j),
-                "kind": "resonator_detuning" if knob.i == knob.j else "reciprocal_coupling",
-                "nominal": float(knob.nominal),
-                "fitted": float(value),
-                "deviation_normalized": delta,
-                "deviation_percent": relative_percent,
-                "frequency_equivalent_deviation_hz": frequency_equivalent_hz,
-            }
-        )
+        is_resonator = knob.i == knob.j
+        row: dict[str, Any] = {
+            "name": knob.name,
+            "i": int(knob.i),
+            "j": int(knob.j),
+            "kind": "resonator_detuning" if is_resonator else "reciprocal_coupling",
+            "nominal": float(knob.nominal),
+            "fitted": float(value),
+            "deviation_normalized": delta,
+            "deviation_percent": relative_percent,
+        }
+        if is_resonator:
+            row.update(
+                resonator_frequency_diagnosis(
+                    float(knob.nominal),
+                    float(value),
+                    omega_mapping,
+                )
+            )
+        rows.append(row)
     return rows
 
 
@@ -392,14 +400,15 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     p = len(knobs)
     nuisance_initial_grad = initial_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
     nuisance_final_grad = final_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
-    scale_hz = _measurement_scale_hz(spec)
-    diagnosis = _diagnosis(knobs, matrix_values, scale_hz)
+    omega_mapping = _measurement_omega_mapping(spec)
+    diagnosis = _diagnosis(knobs, matrix_values, omega_mapping)
 
     return {
         "name": str(spec.get("name", "filter-fit")),
         "model": "explicit-port",
         "nodes": nodes,
         "measurement_model": "joint-nuisance" if nuisance.enabled else "lossless",
+        "measurement_source": spec.get("measurement_source"),
         "parameter_order": [k.name for k in knobs],
         "initial_values": [float(k.initial) for k in knobs],
         "final_values": [float(y) for y in matrix_values],
@@ -420,7 +429,6 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
             for q, k in enumerate(knobs)
         ],
         "diagnosis": diagnosis,
-        "diagnosis_frequency_scale_hz": None if scale_hz is None else float(scale_hz),
         "nuisance": {
             "enabled": bool(nuisance.enabled),
             "order": [item.name for item in nuisance_items],

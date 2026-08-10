@@ -27,6 +27,7 @@ on:
       - 'tests/test_multistate_filter.py'
       - 'tests/test_identifiability.py'
       - 'tests/test_topology_gauge.py'
+      - 'examples/published_filter_vna_topology.json'
       - '.github/workflows/filter-cli-ci.yml'
   workflow_dispatch:
 
@@ -56,3 +57,12 @@ jobs:
           -v
       - name: Check console entry point
         run: twc-filter --help
+      - name: Smoke-test topology-only audit
+        run: |
+          twc-filter audit-topology examples/published_filter_vna_topology.json -o topology-audit.json
+          python - <<'PY'
+          import json
+          data = json.load(open('topology-audit.json', encoding='utf-8'))
+          assert data['uses_measurement_or_sparameters'] is False
+          assert data['aliased_edges'] == [[0, 3], [2, 5]], data['aliased_edges']
+          PY

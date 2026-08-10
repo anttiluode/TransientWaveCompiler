@@ -1,6 +1,6 @@
 # TransientWaveCompiler
 
-**A compiler/tuning toolkit for sparse reciprocal wave systems, with a separate mixed-signal research line for transient-wave computation.**
+**A compiler/tuning toolkit for measured sparse reciprocal wave systems, with a separate mixed-signal research line for transient-wave computation.**
 
 TransientWaveCompiler (TWC) grew out of [GeometricNeuronPlusField](https://github.com/anttiluode/GeometricNeuronPlusField). The project has separated into two experimentally distinct tracks:
 
@@ -25,9 +25,9 @@ S21      = -2j [A^-1]_(L,S)
 d A^-1 / dp = -A^-1 (dA/dp) A^-1
 ```
 
-Optional nominal/design values turn the recovered matrix into fitted-minus-design correction rows. A diagonal knob can represent resonator detuning; an off-diagonal symmetric knob represents reciprocal coupling.
+Optional nominal/design values turn the recovered matrix into fitted-minus-design correction rows. Diagonal knobs represent resonator detuning; off-diagonal symmetric knobs represent reciprocal coupling.
 
-This is **not** a claim that coupling-matrix extraction or computer-aided matrix diagnosis was invented here. Those are established fields. The project now keeps an explicit [prior-art and claim-boundary document](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_PRIOR_ART_AND_CLAIM_BOUNDARY.md).
+This is **not** a claim that coupling-matrix extraction or computer-aided matrix diagnosis was invented here. Those are established fields. The project keeps an explicit [prior-art and claim-boundary document](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_PRIOR_ART_AND_CLAIM_BOUNDARY.md).
 
 ### Strongest positive benchmark
 
@@ -56,7 +56,7 @@ Read the [v0.5 result](https://github.com/anttiluode/TransientWaveCompiler/blob/
 
 ## Real `.s2p` measurement path
 
-The active branch now has a two-port Touchstone path:
+The active branch accepts ordinary two-port Touchstone data:
 
 ```text
 .s2p
@@ -67,25 +67,25 @@ The active branch now has a two-port Touchstone path:
  -> fitted-minus-design diagnosis
 ```
 
-For ordinary narrow-band coupled-resonator work it supports the classical mapping
+For ordinary narrow-band coupled-resonator work it supports
 
 ```text
 Omega = (f0/BW) * (f/f0 - f0/f).
 ```
 
-A ready starting topology with resonator-detuning knobs and nuisance bounds is included at `examples/published_filter_vna_topology.json` on the active branch.
+The tuner also preserves the physical frequency mapping so a diagonal resonator diagnosis can be converted back into a physically meaningful frequency displacement. It deliberately does not invent Hz or screw travel for a coupling coefficient without an actuator calibration.
+
+A ready starting topology is `examples/published_filter_vna_topology.json` on the active branch.
 
 Read the [`twc-filter` / Touchstone workflow](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_TUNING.md).
 
-The next decisive application falsifier is now **real measured hardware with deliberate physical perturbations**, not another clean synthetic response.
+The next decisive application falsifier is **real measured hardware with deliberate physical perturbations**, not another clean synthetic response.
 
 ---
 
-## Parasitic topology discovery: promising, but the first general gate failed
+## A sharper topology boundary: static response can be non-identifying
 
-The preregistered v0.6 experiment hid one weak reciprocal edge, fit the knowingly wrong declared topology, and ranked every absent edge by an exact local residual-sensitivity probe.
-
-Result:
+The preregistered v0.6 experiment hid one weak reciprocal edge, fit the knowingly wrong declared topology, and ranked absent edges from the residual. Four of five hidden-edge locations worked across every optimizer start. One hidden edge, `(2,5)=-0.025`, ranked **8, 8, 7** and failed systematically:
 
 ```text
 true hidden edge ranked #1       12/15
@@ -94,13 +94,53 @@ augmented recovery               12/15
 frozen primary discovery clause  FAIL
 ```
 
-Four of five hidden-edge locations were #1 and recovered across every optimizer start. One hidden edge, `(2,5)=-0.025`, ranked **8, 8, 7** and failed systematically.
+A later full candidate-conditioned refit did **not** rescue that case. The true edge still lost to alternative realizations and its fitted value collapsed toward zero.
 
-So automatic topology discovery is **not** promoted as a product feature. The negative result says something useful: once a flexible wrong topology has compensated by moving its allowed matrix/nuisance variables, the exact local derivative at that fitted point need not identify the omitted physical interaction.
+The exact-Jacobian microscope then found why. At the actual failed compensated fit, define
 
-Read the [v0.6 result](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_RESULT.md).
+```text
+eta = ||(I - P_J) g_edge|| / ||g_edge||
+```
 
-The next research estimator is candidate-conditioned refitting/model comparison rather than a one-shot local derivative scan.
+using the realified complex-response Jacobian. For hidden `(2,5)`:
+
+```text
+eta with 7 physical + 5 nuisance columns     ~1e-15
+eta with the 7 physical columns only         3.4e-15
+```
+
+So the missing edge's entire first-order response direction is already contained in the existing **physical coupling-matrix** tangent space to machine precision. This is not primarily a cable-delay/nuisance problem and not merely bad numerical conditioning.
+
+Adding `S22` does not break this static ambiguity: the physical-only novelty remains about `3e-15`.
+
+The useful interpretation is therefore broader than “the local derivative scan failed”:
+
+> **A static S-parameter response can identify an equivalence class of coupling-matrix realizations rather than a unique physical graph.**
+
+Coupling-matrix realization non-uniqueness/similarity transformations are established prior art. TWC's useful role here is to **measure the ambiguity at the fitted point** and refuse to manufacture confidence from a flat rank.
+
+Known physical perturbations can anchor the internal coordinate system. On the frozen failed solution, adding known resonator-detuning states breaks the exact alias, although only weakly. This motivates a diagnosis workflow that reports identifiability and recommends a measurement/perturbation when the requested physical distinction is not supported by the current data.
+
+Read:
+
+- [v0.6 result](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_RESULT.md)
+- [identifiability / aliasing microscope](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_IDENTIFIABILITY_ALIASING_2026-08-10.md)
+
+---
+
+## The product behavior this points to
+
+Instead of always returning a ranked hidden-edge list:
+
+```text
+fit declared physical model + nuisance
+ -> compute identifiability of requested physical diagnoses
+ -> identifiable: report the correction / candidate evidence
+ -> aliased: report an equivalence or indistinguishability set
+ -> recommend the next measurement or known perturbation that best breaks it
+```
+
+For real data the natural metric should become noise-weighted rather than purely Euclidean, so “identifiable” means distinguishable at the actual measurement noise floor, not merely algebraically nonzero.
 
 ---
 
@@ -147,6 +187,6 @@ The second question is currently producing the stronger application.
 
 ## Repository status
 
-`main` is the stable public landing page. The active research/compiler branch is [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08), which contains the current tuner, Touchstone reader, benchmarks, circuit research record, and executable tests.
+`main` is the stable public landing page. The active research/compiler branch is [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08), which contains the current tuner, Touchstone reader, identifiability tools, benchmarks, circuit research record, and executable tests.
 
 A future code promotion to `main` should be a curated compiler release rather than a blind merge of the full research history.

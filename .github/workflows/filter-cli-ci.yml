@@ -15,12 +15,14 @@ on:
       - 'transientwave/filter_cli.py'
       - 'transientwave/touchstone.py'
       - 'transientwave/topology_discovery.py'
+      - 'transientwave/multistate_filter.py'
       - 'tests/test_filter_tuning.py'
       - 'tests/test_filter_units.py'
       - 'tests/test_filter_analysis.py'
       - 'tests/test_measurement_aware_filter.py'
       - 'tests/test_touchstone.py'
       - 'tests/test_topology_discovery.py'
+      - 'tests/test_multistate_filter.py'
       - '.github/workflows/filter-cli-ci.yml'
   workflow_dispatch:
 
@@ -42,6 +44,7 @@ jobs:
           tests.test_measurement_aware_filter
           tests.test_touchstone
           tests.test_topology_discovery
+          tests.test_multistate_filter
           tests.test_generalized_coupling_matrix
           tests.test_coupled_resonator_filter
           -v

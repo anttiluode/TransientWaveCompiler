@@ -1,0 +1,30 @@
+name: filter-topology-gauge-table
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/topology_gauge.py'
+      - 'experiments/published_filter_topology_gauge_table.py'
+      - 'tests/test_topology_gauge.py'
+      - '.github/workflows/filter-topology-gauge-table.yml'
+  workflow_dispatch:
+
+jobs:
+  capability-map:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run topology gauge unit tests
+        run: python -m unittest tests.test_topology_gauge -v
+      - name: Build topology-only capability map
+        run: python experiments/published_filter_topology_gauge_table.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-topology-gauge-table
+          path: published-filter-topology-gauge-table.json

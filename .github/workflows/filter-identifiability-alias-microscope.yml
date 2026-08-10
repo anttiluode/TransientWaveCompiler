@@ -7,6 +7,7 @@ on:
     paths:
       - 'experiments/filter_identifiability_alias_microscope.py'
       - 'experiments/filter_identifiability_gauge_microscope.py'
+      - 'experiments/filter_identifiability_rotation_proof.py'
       - 'transientwave/identifiability.py'
       - '.github/workflows/filter-identifiability-alias-microscope.yml'
   workflow_dispatch:
@@ -24,9 +25,12 @@ jobs:
         run: python experiments/filter_identifiability_alias_microscope.py
       - name: Separate physical realization gauge from nuisance alias
         run: python experiments/filter_identifiability_gauge_microscope.py
+      - name: Prove exact R2-R4 realization rotation
+        run: python experiments/filter_identifiability_rotation_proof.py
       - uses: actions/upload-artifact@v4
         with:
           name: filter-identifiability-microscopes
           path: |
             filter-identifiability-alias-microscope.json
             filter-identifiability-gauge-microscope.json
+            filter-identifiability-rotation-proof.json

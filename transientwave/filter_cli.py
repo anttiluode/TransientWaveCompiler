@@ -12,6 +12,7 @@ from .filter_tuning import (
     tune_filter_spec,
 )
 from .touchstone import (
+    inject_touchstone_bandpass_measurement,
     inject_touchstone_measurement,
     read_touchstone_2port,
 )
@@ -108,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
 
     prepare_s2p = sub.add_parser(
         "prepare-s2p",
-        help="inject a Touchstone trace into a topology JSON using an explicit Omega mapping",
+        help="inject a Touchstone trace into a topology JSON with an explicit Omega normalization",
     )
     prepare_s2p.add_argument("topology", help="JSON containing model/nodes/parameters and optional nuisance")
     prepare_s2p.add_argument("s2p", help="input .s2p / Touchstone file")
@@ -116,13 +117,25 @@ def main(argv: list[str] | None = None) -> int:
         "--center-hz",
         type=float,
         required=True,
-        help="frequency mapped to Omega=0",
+        help="filter center frequency mapped to Omega=0",
     )
-    prepare_s2p.add_argument(
+    normalization = prepare_s2p.add_mutually_exclusive_group(required=True)
+    normalization.add_argument(
+        "--bandwidth-hz",
+        type=float,
+        help="use classical bandpass Omega=(f0/BW)*(f/f0-f0/f)",
+    )
+    normalization.add_argument(
         "--scale-hz",
         type=float,
-        required=True,
-        help="nonzero scale in Omega=(f-center_hz)/scale_hz; may be negative",
+        help="use linear Omega=(f-center_hz)/scale_hz; scale may be negative",
+    )
+    prepare_s2p.add_argument(
+        "--omega-sign",
+        type=float,
+        choices=[-1.0, 1.0],
+        default=1.0,
+        help="sign convention for --bandwidth-hz normalization (default +1)",
     )
     prepare_s2p.add_argument("-o", "--output", required=True, help="write fit-ready JSON here")
     _add_compact_flag(prepare_s2p)
@@ -143,19 +156,30 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "prepare-s2p":
             topology = _load_json(args.topology)
             data = read_touchstone_2port(args.s2p)
-            prepared = inject_touchstone_measurement(
-                topology,
-                data,
-                center_hz=args.center_hz,
-                scale_hz=args.scale_hz,
-                source=str(args.s2p),
-            )
+            if args.bandwidth_hz is not None:
+                prepared = inject_touchstone_bandpass_measurement(
+                    topology,
+                    data,
+                    center_hz=args.center_hz,
+                    bandwidth_hz=args.bandwidth_hz,
+                    omega_sign=args.omega_sign,
+                    source=str(args.s2p),
+                )
+            else:
+                prepared = inject_touchstone_measurement(
+                    topology,
+                    data,
+                    center_hz=args.center_hz,
+                    scale_hz=args.scale_hz,
+                    source=str(args.s2p),
+                )
             # Validate the generated object immediately so a bad topology or
             # normalization never gets written as a supposedly fit-ready file.
             parse_filter_spec(prepared)
             _write_json(args.output, prepared, compact=args.compact)
+            mapping = prepared["measurement_source"]["omega_mapping"]["mode"]
             print(
-                f"prepared {args.output}: samples={data.samples}, "
+                f"prepared {args.output}: samples={data.samples}, mapping={mapping}, "
                 f"Omega={prepared['omega'][0]:+.6g}..{prepared['omega'][-1]:+.6g}"
             )
             return 0

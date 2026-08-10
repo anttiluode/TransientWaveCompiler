@@ -75,8 +75,8 @@ def _summary(result: dict[str, Any]) -> str:
         part = f"{row['name']}={row['deviation_normalized']:+.6g} from nominal"
         if row.get("deviation_percent") is not None:
             part += f" ({row['deviation_percent']:+.3f}%)"
-        if row.get("frequency_equivalent_deviation_hz") is not None:
-            part += f" [{_format_hz(float(row['frequency_equivalent_deviation_hz']))} equiv]"
+        if row.get("resonance_deviation_hz") is not None:
+            part += f" [resonance {_format_hz(float(row['resonance_deviation_hz']))}]"
         diagnosis_parts.append(part)
     if diagnosis_parts:
         lines.append("diagnosis: " + "; ".join(diagnosis_parts))

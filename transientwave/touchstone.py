@@ -308,9 +308,9 @@ def normalized_omega_linear(
 ) -> np.ndarray:
     """Explicit linear map ``Omega = (f - center_hz) / scale_hz``.
 
-    This is intentionally not presented as a universal bandpass transform.
-    The caller chooses the normalization used by its coupling-matrix model.
-    A negative ``scale_hz`` may be used to reverse the Omega sign convention.
+    This remains useful when the model's normalized coordinate is already
+    known to be linear over the measured band. A negative ``scale_hz`` may be
+    used to reverse the Omega sign convention.
     """
     center_hz = float(center_hz)
     scale_hz = float(scale_hz)
@@ -322,6 +322,58 @@ def normalized_omega_linear(
     return (f - center_hz) / scale_hz
 
 
+def normalized_omega_bandpass(
+    frequency_hz: np.ndarray,
+    *,
+    center_hz: float,
+    bandwidth_hz: float,
+    omega_sign: float = 1.0,
+) -> np.ndarray:
+    """Classical narrow-band coupling-matrix bandpass normalization.
+
+    ``Omega = sign * (f0/BW) * (f/f0 - f0/f)``
+
+    The transform is exact for the stated normalized low-pass coordinate, not
+    the first-order linear approximation around ``f0``. ``omega_sign`` is
+    explicitly ±1 because coupling-matrix sign conventions differ.
+    """
+    center_hz = float(center_hz)
+    bandwidth_hz = float(bandwidth_hz)
+    omega_sign = float(omega_sign)
+    if not np.isfinite(center_hz) or center_hz <= 0.0:
+        raise ValueError("center_hz must be finite and positive")
+    if not np.isfinite(bandwidth_hz) or bandwidth_hz <= 0.0:
+        raise ValueError("bandwidth_hz must be finite and positive")
+    if omega_sign not in {-1.0, 1.0}:
+        raise ValueError("omega_sign must be +1 or -1")
+    f = np.asarray(frequency_hz, dtype=float)
+    if np.any(~np.isfinite(f)) or np.any(f <= 0.0):
+        raise ValueError("bandpass normalization requires positive finite frequencies")
+    return omega_sign * (center_hz / bandwidth_hz) * (f / center_hz - center_hz / f)
+
+
+def _measurement_metadata(data: Touchstone2Port, source: str | None) -> dict[str, Any]:
+    return {
+        "format": "touchstone",
+        "path": source,
+        "version": data.version,
+        "reference_ohm": float(data.reference_ohm),
+        "input_frequency_unit": data.frequency_unit,
+        "input_data_format": data.data_format,
+        "two_port_data_order": data.data_order,
+    }
+
+
+def _measurement_arrays(data: Touchstone2Port, omega: np.ndarray, source_meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "measurement_source": source_meta,
+        "frequency_hz": data.frequency_hz.tolist(),
+        "omega": np.asarray(omega, dtype=float).tolist(),
+        "s11": {"real": np.real(data.s11).tolist(), "imag": np.imag(data.s11).tolist()},
+        "s21": {"real": np.real(data.s21).tolist(), "imag": np.imag(data.s21).tolist()},
+    }
+
+
 def touchstone_measurement_fragment(
     data: Touchstone2Port,
     *,
@@ -329,30 +381,44 @@ def touchstone_measurement_fragment(
     scale_hz: float,
     source: str | None = None,
 ) -> dict[str, Any]:
+    """Prepare a measurement with an explicitly chosen linear Omega map."""
     omega = normalized_omega_linear(
         data.frequency_hz, center_hz=center_hz, scale_hz=scale_hz
     )
-    return {
-        "measurement_source": {
-            "format": "touchstone",
-            "path": source,
-            "version": data.version,
-            "reference_ohm": float(data.reference_ohm),
-            "input_frequency_unit": data.frequency_unit,
-            "input_data_format": data.data_format,
-            "two_port_data_order": data.data_order,
-            "omega_mapping": {
-                "mode": "linear",
-                "center_hz": float(center_hz),
-                "scale_hz": float(scale_hz),
-                "formula": "(frequency_hz - center_hz) / scale_hz",
-            },
-        },
-        "frequency_hz": data.frequency_hz.tolist(),
-        "omega": omega.tolist(),
-        "s11": {"real": np.real(data.s11).tolist(), "imag": np.imag(data.s11).tolist()},
-        "s21": {"real": np.real(data.s21).tolist(), "imag": np.imag(data.s21).tolist()},
+    meta = _measurement_metadata(data, source)
+    meta["omega_mapping"] = {
+        "mode": "linear",
+        "center_hz": float(center_hz),
+        "scale_hz": float(scale_hz),
+        "formula": "(frequency_hz - center_hz) / scale_hz",
     }
+    return _measurement_arrays(data, omega, meta)
+
+
+def touchstone_bandpass_measurement_fragment(
+    data: Touchstone2Port,
+    *,
+    center_hz: float,
+    bandwidth_hz: float,
+    omega_sign: float = 1.0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Prepare a measurement with the classical bandpass Omega transform."""
+    omega = normalized_omega_bandpass(
+        data.frequency_hz,
+        center_hz=center_hz,
+        bandwidth_hz=bandwidth_hz,
+        omega_sign=omega_sign,
+    )
+    meta = _measurement_metadata(data, source)
+    meta["omega_mapping"] = {
+        "mode": "bandpass",
+        "center_hz": float(center_hz),
+        "bandwidth_hz": float(bandwidth_hz),
+        "omega_sign": float(omega_sign),
+        "formula": "omega_sign*(center_hz/bandwidth_hz)*(f/center_hz-center_hz/f)",
+    }
+    return _measurement_arrays(data, omega, meta)
 
 
 def inject_touchstone_measurement(
@@ -363,11 +429,34 @@ def inject_touchstone_measurement(
     scale_hz: float,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Return a copy of a topology spec with measured S11/S21 inserted."""
+    """Return a topology spec with linearly normalized measured S11/S21 inserted."""
     result = dict(topology_spec)
     result.update(
         touchstone_measurement_fragment(
             data, center_hz=center_hz, scale_hz=scale_hz, source=source
+        )
+    )
+    return result
+
+
+def inject_touchstone_bandpass_measurement(
+    topology_spec: dict[str, Any],
+    data: Touchstone2Port,
+    *,
+    center_hz: float,
+    bandwidth_hz: float,
+    omega_sign: float = 1.0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Return a topology spec with bandpass-normalized measured S11/S21 inserted."""
+    result = dict(topology_spec)
+    result.update(
+        touchstone_bandpass_measurement_fragment(
+            data,
+            center_hz=center_hz,
+            bandwidth_hz=bandwidth_hz,
+            omega_sign=omega_sign,
+            source=source,
         )
     )
     return result

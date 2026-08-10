@@ -1,0 +1,29 @@
+{
+  "name": "published-four-resonator-vna-template",
+  "model": "explicit-port",
+  "nodes": 6,
+  "parameters": [
+    {"name": "mS1", "i": 0, "j": 1, "initial": 1.02, "nominal": 1.02, "min": 0.40, "max": 1.50},
+    {"name": "d1",  "i": 1, "j": 1, "initial": 0.00, "nominal": 0.00, "min": -0.50, "max": 0.50},
+    {"name": "m12", "i": 1, "j": 2, "initial": -0.86, "nominal": -0.86, "min": -1.50, "max": -0.20},
+    {"name": "d2",  "i": 2, "j": 2, "initial": 0.00, "nominal": 0.00, "min": -0.50, "max": 0.50},
+    {"name": "m23", "i": 2, "j": 3, "initial": 0.77, "nominal": 0.77, "min": 0.20, "max": 1.30},
+    {"name": "d3",  "i": 3, "j": 3, "initial": 0.00, "nominal": 0.00, "min": -0.50, "max": 0.50},
+    {"name": "m34", "i": 3, "j": 4, "initial": -0.86, "nominal": -0.86, "min": -1.50, "max": -0.20},
+    {"name": "d4",  "i": 4, "j": 4, "initial": 0.00, "nominal": 0.00, "min": -0.50, "max": 0.50},
+    {"name": "m4L", "i": 4, "j": 5, "initial": 1.02, "nominal": 1.02, "min": 0.40, "max": 1.50},
+    {"name": "m14", "i": 1, "j": 4, "initial": -0.19, "nominal": -0.19, "min": -0.70, "max": 0.40},
+    {"name": "mSL", "i": 0, "j": 5, "initial": 0.0005, "nominal": 0.0005, "min": -0.05, "max": 0.05}
+  ],
+  "nuisance": {
+    "resonator_loss": {"initial": 0.010, "min": 0.000, "max": 0.080},
+    "phi11": {"initial": 0.000, "min": -1.5707963267948966, "max": 1.5707963267948966},
+    "tau11": {"initial": 0.000, "min": -0.10, "max": 0.10},
+    "phi21": {"initial": 0.000, "min": -1.5707963267948966, "max": 1.5707963267948966},
+    "tau21": {"initial": 0.000, "min": -0.10, "max": 0.10}
+  },
+  "optimizer": {
+    "iterations": 2000,
+    "learning_rate": 0.010
+  }
+}

@@ -11,6 +11,11 @@ from .generalized_coupling_matrix import (
     complex_response_loss_and_gradient,
     generalized_scattering,
 )
+from .measurement_aware_filter import (
+    lossy_scattering_with_derivatives,
+    measurement_aware_loss_and_gradient,
+    measurement_aware_response,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +29,41 @@ class FilterKnob:
 
     def parameter(self) -> MatrixParameter:
         return MatrixParameter(int(self.i), int(self.j), str(self.name))
+
+
+@dataclass(frozen=True)
+class BoundedScalar:
+    name: str
+    initial: float
+    minimum: float
+    maximum: float
+    unit: str
+
+    @property
+    def free(self) -> bool:
+        return self.maximum > self.minimum
+
+
+@dataclass(frozen=True)
+class MeasurementNuisanceConfig:
+    resonator_loss: BoundedScalar
+    phi11: BoundedScalar
+    tau11: BoundedScalar
+    phi21: BoundedScalar
+    tau21: BoundedScalar
+
+    def ordered(self) -> tuple[BoundedScalar, ...]:
+        return (
+            self.resonator_loss,
+            self.phi11,
+            self.tau11,
+            self.phi21,
+            self.tau21,
+        )
+
+    @property
+    def enabled(self) -> bool:
+        return any(item.free or item.initial != 0.0 for item in self.ordered())
 
 
 @dataclass(frozen=True)
@@ -55,6 +95,66 @@ def _complex_array(obj: Mapping[str, Any], name: str, expected: int) -> np.ndarr
     if not np.all(np.isfinite(real)) or not np.all(np.isfinite(imag)):
         raise ValueError(f"{name} contains non-finite data")
     return real + 1j * imag
+
+
+def _bounded_scalar(
+    raw: Mapping[str, Any],
+    name: str,
+    *,
+    default_initial: float = 0.0,
+    default_minimum: float = 0.0,
+    default_maximum: float = 0.0,
+    unit: str,
+    nonnegative: bool = False,
+) -> BoundedScalar:
+    item = raw.get(name, {})
+    if item is None:
+        item = {}
+    if not isinstance(item, Mapping):
+        raise ValueError(f"nuisance.{name} must be an object")
+    value = BoundedScalar(
+        name=name,
+        initial=float(item.get("initial", default_initial)),
+        minimum=float(item.get("min", default_minimum)),
+        maximum=float(item.get("max", default_maximum)),
+        unit=unit,
+    )
+    if not np.isfinite([value.initial, value.minimum, value.maximum]).all():
+        raise ValueError(f"nuisance.{name} contains non-finite bounds/value")
+    if value.minimum > value.maximum:
+        raise ValueError(f"nuisance.{name} min exceeds max")
+    if not (value.minimum <= value.initial <= value.maximum):
+        raise ValueError(f"nuisance.{name} initial value lies outside bounds")
+    if nonnegative and value.minimum < 0:
+        raise ValueError(f"nuisance.{name} must be nonnegative")
+    return value
+
+
+def parse_measurement_nuisance(spec: Mapping[str, Any]) -> MeasurementNuisanceConfig:
+    """Parse optional joint measurement/model nuisance parameters.
+
+    Missing nuisance entries are fixed at zero. This keeps existing lossless
+    JSON specifications fully backward compatible while allowing any subset of
+    the five v0.5 nuisance variables to be fitted.
+    """
+    raw = spec.get("nuisance", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("nuisance must be an object")
+    allowed = {"resonator_loss", "phi11", "tau11", "phi21", "tau21"}
+    unknown = sorted(set(raw) - allowed)
+    if unknown:
+        raise ValueError(f"unknown nuisance field(s): {', '.join(unknown)}")
+    return MeasurementNuisanceConfig(
+        resonator_loss=_bounded_scalar(
+            raw, "resonator_loss", unit="normalized", nonnegative=True
+        ),
+        phi11=_bounded_scalar(raw, "phi11", unit="radian"),
+        tau11=_bounded_scalar(raw, "tau11", unit="radian_per_normalized_omega"),
+        phi21=_bounded_scalar(raw, "phi21", unit="radian"),
+        tau21=_bounded_scalar(raw, "tau21", unit="radian_per_normalized_omega"),
+    )
 
 
 def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
@@ -123,38 +223,25 @@ def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
         epsilon=float(raw_opt.get("epsilon", 1e-8)),
     )
     opt.validate()
+    parse_measurement_nuisance(spec)
     return nodes, knobs, omega, s11, s21, opt
 
 
-def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
-    """Fit one constrained reciprocal matrix to measured complex S parameters."""
-    nodes, knobs, omega, target_s11, target_s21, opt = parse_filter_spec(spec)
-    parameters = [k.parameter() for k in knobs]
-    x = np.asarray([k.initial for k in knobs], dtype=float)
-    lower = np.asarray([k.minimum for k in knobs], dtype=float)
-    upper = np.asarray([k.maximum for k in knobs], dtype=float)
+def _run_adam(
+    x: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    *,
+    opt: AdamConfig,
+    objective,
+) -> tuple[np.ndarray, float, np.ndarray, float, np.ndarray, list[float]]:
     m = np.zeros_like(x)
     v = np.zeros_like(x)
     loss_trace: list[float] = []
-
-    initial_loss, initial_grad = complex_response_loss_and_gradient(
-        x,
-        n=nodes,
-        parameters=parameters,
-        omega=omega,
-        target_s11=target_s11,
-        target_s21=target_s21,
-    )
+    initial_loss, initial_grad = objective(x)
 
     for t in range(1, opt.iterations + 1):
-        loss, grad = complex_response_loss_and_gradient(
-            x,
-            n=nodes,
-            parameters=parameters,
-            omega=omega,
-            target_s11=target_s11,
-            target_s21=target_s21,
-        )
+        loss, grad = objective(x)
         loss_trace.append(float(loss))
         m = opt.beta1 * m + (1.0 - opt.beta1) * grad
         v = opt.beta2 * v + (1.0 - opt.beta2) * (grad * grad)
@@ -166,31 +253,109 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
             upper,
         )
 
-    final_loss, final_grad = complex_response_loss_and_gradient(
-        x,
-        n=nodes,
-        parameters=parameters,
-        omega=omega,
-        target_s11=target_s11,
-        target_s21=target_s21,
-    )
-    fitted_matrix = matrix_from_parameters(nodes, parameters, x)
-    fitted_s11, fitted_s21 = generalized_scattering(fitted_matrix, omega)
+    final_loss, final_grad = objective(x)
+    return x, float(initial_loss), initial_grad, float(final_loss), final_grad, loss_trace
+
+
+def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Fit one constrained reciprocal matrix to measured complex S parameters.
+
+    If ``spec["nuisance"]`` is absent, this is the original lossless fitter.
+    If nuisance fields are supplied, the physical matrix is optimized jointly
+    with uniform resonator loss and/or S11/S21 linear phase nuisance.
+    """
+    nodes, knobs, omega, target_s11, target_s21, opt = parse_filter_spec(spec)
+    nuisance = parse_measurement_nuisance(spec)
+    parameters = [k.parameter() for k in knobs]
+    matrix_initial = np.asarray([k.initial for k in knobs], dtype=float)
+    matrix_lower = np.asarray([k.minimum for k in knobs], dtype=float)
+    matrix_upper = np.asarray([k.maximum for k in knobs], dtype=float)
+
+    nuisance_items = nuisance.ordered()
+    if nuisance.enabled:
+        x0 = np.concatenate(
+            [matrix_initial, np.asarray([item.initial for item in nuisance_items], dtype=float)]
+        )
+        lower = np.concatenate(
+            [matrix_lower, np.asarray([item.minimum for item in nuisance_items], dtype=float)]
+        )
+        upper = np.concatenate(
+            [matrix_upper, np.asarray([item.maximum for item in nuisance_items], dtype=float)]
+        )
+
+        def objective(x: np.ndarray):
+            return measurement_aware_loss_and_gradient(
+                x,
+                n=nodes,
+                parameters=parameters,
+                omega=omega,
+                measured_s11=target_s11,
+                measured_s21=target_s21,
+            )
+
+        x, initial_loss, initial_grad, final_loss, final_grad, loss_trace = _run_adam(
+            x0, lower, upper, opt=opt, objective=objective
+        )
+        matrix_values = x[: len(knobs)]
+        nuisance_values = x[len(knobs):]
+        fitted_s11, fitted_s21 = measurement_aware_response(
+            matrix_values,
+            n=nodes,
+            parameters=parameters,
+            omega=omega,
+            resonator_loss=float(nuisance_values[0]),
+            phi11=float(nuisance_values[1]),
+            tau11=float(nuisance_values[2]),
+            phi21=float(nuisance_values[3]),
+            tau21=float(nuisance_values[4]),
+        )
+        physical_s11, physical_s21, *_ = lossy_scattering_with_derivatives(
+            matrix_from_parameters(nodes, parameters, matrix_values),
+            omega,
+            parameters,
+            float(nuisance_values[0]),
+        )
+    else:
+        x0 = matrix_initial.copy()
+
+        def objective(x: np.ndarray):
+            return complex_response_loss_and_gradient(
+                x,
+                n=nodes,
+                parameters=parameters,
+                omega=omega,
+                target_s11=target_s11,
+                target_s21=target_s21,
+            )
+
+        matrix_values, initial_loss, initial_grad, final_loss, final_grad, loss_trace = _run_adam(
+            x0, matrix_lower, matrix_upper, opt=opt, objective=objective
+        )
+        nuisance_values = np.zeros(5, dtype=float)
+        fitted_matrix_lossless = matrix_from_parameters(nodes, parameters, matrix_values)
+        fitted_s11, fitted_s21 = generalized_scattering(fitted_matrix_lossless, omega)
+        physical_s11, physical_s21 = fitted_s11, fitted_s21
+
+    fitted_matrix = matrix_from_parameters(nodes, parameters, matrix_values)
+    p = len(knobs)
+    nuisance_initial_grad = initial_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
+    nuisance_final_grad = final_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
 
     return {
         "name": str(spec.get("name", "filter-fit")),
         "model": "explicit-port",
         "nodes": nodes,
+        "measurement_model": "joint-nuisance" if nuisance.enabled else "lossless",
         "parameter_order": [k.name for k in knobs],
         "initial_values": [float(k.initial) for k in knobs],
-        "final_values": [float(y) for y in x],
+        "final_values": [float(y) for y in matrix_values],
         "parameters": [
             {
                 "name": k.name,
                 "i": int(k.i),
                 "j": int(k.j),
                 "initial": float(k.initial),
-                "final": float(x[q]),
+                "final": float(matrix_values[q]),
                 "min": float(k.minimum),
                 "max": float(k.maximum),
                 "initial_gradient": float(initial_grad[q]),
@@ -198,6 +363,24 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
             }
             for q, k in enumerate(knobs)
         ],
+        "nuisance": {
+            "enabled": bool(nuisance.enabled),
+            "order": [item.name for item in nuisance_items],
+            "parameters": [
+                {
+                    "name": item.name,
+                    "initial": float(item.initial),
+                    "final": float(nuisance_values[q]),
+                    "min": float(item.minimum),
+                    "max": float(item.maximum),
+                    "unit": item.unit,
+                    "free": bool(item.free),
+                    "initial_gradient": float(nuisance_initial_grad[q]),
+                    "final_gradient": float(nuisance_final_grad[q]),
+                }
+                for q, item in enumerate(nuisance_items)
+            ],
+        },
         "initial_loss": float(initial_loss),
         "final_loss": float(final_loss),
         "loss_reduction_factor": float(initial_loss / max(final_loss, 1e-300)),
@@ -214,5 +397,13 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
         "measured_s21": {"real": np.real(target_s21).tolist(), "imag": np.imag(target_s21).tolist()},
         "fitted_s11": {"real": np.real(fitted_s11).tolist(), "imag": np.imag(fitted_s11).tolist()},
         "fitted_s21": {"real": np.real(fitted_s21).tolist(), "imag": np.imag(fitted_s21).tolist()},
+        "physical_s11": {
+            "real": np.real(physical_s11).tolist(),
+            "imag": np.imag(physical_s11).tolist(),
+        },
+        "physical_s21": {
+            "real": np.real(physical_s21).tolist(),
+            "imag": np.imag(physical_s21).tolist(),
+        },
         "loss_trace_every_25": [float(loss_trace[i]) for i in range(0, len(loss_trace), 25)],
     }

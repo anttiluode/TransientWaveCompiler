@@ -26,6 +26,7 @@ class FilterKnob:
     initial: float
     minimum: float
     maximum: float
+    nominal: float | None = None
 
     def parameter(self) -> MatrixParameter:
         return MatrixParameter(int(self.i), int(self.j), str(self.name))
@@ -157,6 +158,22 @@ def parse_measurement_nuisance(spec: Mapping[str, Any]) -> MeasurementNuisanceCo
     )
 
 
+def _measurement_scale_hz(spec: Mapping[str, Any]) -> float | None:
+    source = spec.get("measurement_source")
+    if not isinstance(source, Mapping):
+        return None
+    mapping = source.get("omega_mapping")
+    if not isinstance(mapping, Mapping) or str(mapping.get("mode", "")) != "linear":
+        return None
+    try:
+        scale_hz = float(mapping["scale_hz"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not np.isfinite(scale_hz) or scale_hz == 0.0:
+        return None
+    return scale_hz
+
+
 def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
     int,
     list[FilterKnob],
@@ -181,6 +198,8 @@ def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
     for item in raw_knobs:
         if not isinstance(item, Mapping):
             raise ValueError("each parameter must be an object")
+        raw_nominal = item.get("nominal")
+        nominal = None if raw_nominal is None else float(raw_nominal)
         knob = FilterKnob(
             name=str(item["name"]),
             i=int(item["i"]),
@@ -188,6 +207,7 @@ def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
             initial=float(item["initial"]),
             minimum=float(item["min"]),
             maximum=float(item["max"]),
+            nominal=nominal,
         )
         if not knob.name or knob.name in seen_names:
             raise ValueError(f"parameter names must be unique and non-empty: {knob.name!r}")
@@ -196,7 +216,10 @@ def parse_filter_spec(spec: Mapping[str, Any]) -> tuple[
         key = tuple(sorted((knob.i, knob.j)))
         if key in seen_entries:
             raise ValueError(f"duplicate reciprocal matrix entry for parameter {knob.name}")
-        if not np.isfinite([knob.initial, knob.minimum, knob.maximum]).all():
+        values_to_check = [knob.initial, knob.minimum, knob.maximum]
+        if knob.nominal is not None:
+            values_to_check.append(knob.nominal)
+        if not np.isfinite(values_to_check).all():
             raise ValueError(f"parameter {knob.name} contains non-finite bounds/value")
         if knob.minimum > knob.maximum:
             raise ValueError(f"parameter {knob.name} min exceeds max")
@@ -257,12 +280,41 @@ def _run_adam(
     return x, float(initial_loss), initial_grad, float(final_loss), final_grad, loss_trace
 
 
+def _diagnosis(knobs: Sequence[FilterKnob], fitted: np.ndarray, scale_hz: float | None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for knob, value in zip(knobs, fitted):
+        if knob.nominal is None:
+            continue
+        delta = float(value - knob.nominal)
+        relative_percent = None
+        if abs(knob.nominal) > 1e-15:
+            relative_percent = float(100.0 * delta / knob.nominal)
+        frequency_equivalent_hz = None if scale_hz is None else float(delta * scale_hz)
+        rows.append(
+            {
+                "name": knob.name,
+                "i": int(knob.i),
+                "j": int(knob.j),
+                "kind": "resonator_detuning" if knob.i == knob.j else "reciprocal_coupling",
+                "nominal": float(knob.nominal),
+                "fitted": float(value),
+                "deviation_normalized": delta,
+                "deviation_percent": relative_percent,
+                "frequency_equivalent_deviation_hz": frequency_equivalent_hz,
+            }
+        )
+    return rows
+
+
 def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     """Fit one constrained reciprocal matrix to measured complex S parameters.
 
     If ``spec["nuisance"]`` is absent, this is the original lossless fitter.
     If nuisance fields are supplied, the physical matrix is optimized jointly
     with uniform resonator loss and/or S11/S21 linear phase nuisance.
+
+    Optional per-knob ``nominal`` values do not affect optimization. They turn
+    the recovered matrix into a diagnosis relative to the intended design.
     """
     nodes, knobs, omega, target_s11, target_s21, opt = parse_filter_spec(spec)
     nuisance = parse_measurement_nuisance(spec)
@@ -340,6 +392,8 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
     p = len(knobs)
     nuisance_initial_grad = initial_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
     nuisance_final_grad = final_grad[p:] if nuisance.enabled else np.zeros(5, dtype=float)
+    scale_hz = _measurement_scale_hz(spec)
+    diagnosis = _diagnosis(knobs, matrix_values, scale_hz)
 
     return {
         "name": str(spec.get("name", "filter-fit")),
@@ -356,6 +410,8 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
                 "j": int(k.j),
                 "initial": float(k.initial),
                 "final": float(matrix_values[q]),
+                "nominal": None if k.nominal is None else float(k.nominal),
+                "deviation_from_nominal": None if k.nominal is None else float(matrix_values[q] - k.nominal),
                 "min": float(k.minimum),
                 "max": float(k.maximum),
                 "initial_gradient": float(initial_grad[q]),
@@ -363,6 +419,8 @@ def tune_filter_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
             }
             for q, k in enumerate(knobs)
         ],
+        "diagnosis": diagnosis,
+        "diagnosis_frequency_scale_hz": None if scale_hz is None else float(scale_hz),
         "nuisance": {
             "enabled": bool(nuisance.enabled),
             "order": [item.name for item in nuisance_items],

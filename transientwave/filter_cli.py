@@ -29,6 +29,17 @@ def _write_json(path: str, obj: dict[str, Any], *, compact: bool) -> None:
     Path(path).write_text(text + "\n", encoding="utf-8")
 
 
+def _format_hz(value: float) -> str:
+    a = abs(value)
+    if a >= 1e9:
+        return f"{value / 1e9:+.6g} GHz"
+    if a >= 1e6:
+        return f"{value / 1e6:+.6g} MHz"
+    if a >= 1e3:
+        return f"{value / 1e3:+.6g} kHz"
+    return f"{value:+.6g} Hz"
+
+
 def _summary(result: dict[str, Any]) -> str:
     names = result["parameter_order"]
     values = result["final_values"]
@@ -50,6 +61,17 @@ def _summary(result: dict[str, Any]) -> str:
         )
         if nuisance_pairs:
             lines.append(f"nuisance: {nuisance_pairs}")
+
+    diagnosis_parts = []
+    for row in result.get("diagnosis", []):
+        part = f"{row['name']}={row['deviation_normalized']:+.6g} from nominal"
+        if row.get("deviation_percent") is not None:
+            part += f" ({row['deviation_percent']:+.3f}%)"
+        if row.get("frequency_equivalent_deviation_hz") is not None:
+            part += f" [{_format_hz(float(row['frequency_equivalent_deviation_hz']))} equiv]"
+        diagnosis_parts.append(part)
+    if diagnosis_parts:
+        lines.append("diagnosis: " + "; ".join(diagnosis_parts))
     return "\n".join(lines)
 
 
@@ -145,10 +167,12 @@ def main(argv: list[str] | None = None) -> int:
                 nuisance = parse_measurement_nuisance(spec)
                 free_nuisance = sum(item.free for item in nuisance.ordered())
                 model = "joint-nuisance" if nuisance.enabled else "lossless"
+                nominal_count = sum(knob.nominal is not None for knob in knobs)
                 print(
                     f"valid explicit-port filter spec: nodes={nodes}, "
                     f"knobs={len(knobs)}, samples={len(omega)}, iterations={opt.iterations}, "
-                    f"measurement_model={model}, free_nuisance={free_nuisance}"
+                    f"measurement_model={model}, free_nuisance={free_nuisance}, "
+                    f"nominal_knobs={nominal_count}"
                 )
                 return 0
 

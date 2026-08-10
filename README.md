@@ -1,89 +1,21 @@
 # TransientWaveCompiler
 
-**A compiler/tuning toolkit for sparse reciprocal wave systems, plus a mixed-signal research architecture for transient-wave computation.**
+**Diagnose sparse reciprocal wave systems from measured response — with a separate mixed-signal research line for transient-wave computation.**
 
-TransientWaveCompiler (TWC) grew out of the GeometricNeuronPlusField experiments. The repository now contains **two related but experimentally distinct projects**:
+TransientWaveCompiler (TWC) grew out of [GeometricNeuronPlusField](https://github.com/anttiluode/GeometricNeuronPlusField). The repository now contains two related but experimentally distinct projects:
 
-1. **TWC compiler / reciprocal-system tuner** — compile, analyze and optimize sparse symmetric wave/filter operators on an ordinary computer.
-2. **TW-1A mixed-signal research backend** — explore whether a reciprocal switched-cap wave body can regenerate transient history and expose physical training credit without an `O(N*T)` stored trajectory tape.
+1. **TWC compiler / reciprocal-system tuner** — infer and optimize sparse symmetric wave/filter operators on an ordinary computer.
+2. **TW-1A mixed-signal research backend** — investigate whether a reciprocal physical wave body can regenerate transient history and expose local training credit without storing an `O(N*T)` trajectory tape.
 
-The second project produced real circuit simplifications and ngspice results, but its attractive small-cap stochastic on-device gradient point is **not qualified** after controlled task × fabrication × dynamic-noise experiments. The first project is now the stronger application mainline.
-
-For the detailed hardware audit, start with:
-
-> **[`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md)**
+The compiler/tuner is now the application mainline. The chip is parked as a research object with both positive circuit results and a useful negative stochastic-adjoint result.
 
 ---
 
-## Current headline: the compiler has escaped the toy benchmark
+## Current application: turn filter tuning into diagnosis
 
-The classical coupled-resonator filter formalism is built from the same kind of object TWC already understands well:
+Given a filter topology and complex measured `S11` / `S21`, `twc-filter` estimates the physical coupling matrix rather than merely searching for a trace match.
 
-```text
-sparse reciprocal symmetric matrix
-+ prescribed graph topology
-+ local matrix parameters
-+ measurable response
-+ exact edge/knob derivatives
-```
-
-TWC now includes a separate, explicit coupling-matrix application layer rather than pretending microwave normalization and the TW transient recurrence are literally the same equation.
-
-### Published three-resonator filter — 5/5 exact recovery
-
-For the published target
-
-```text
-M = [[0,   .6, .2],
-     [.6,  0,  .6],
-     [.2, .6,  0 ]],
-```
-
-an exact inverse-matrix gradient was checked against central finite differences and then used to tune five deliberately detuned matrices.
-
-Result:
-
-```text
-5/5 response pass
-5/5 exact coupling recovery
-worst coupling-vector RMSE ~1.14e-4
-```
-
-See:
-
-- `transientwave/coupled_resonator_filter.py`
-- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_PREREG.md`
-- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_RESULT.md`
-
-### Resonator offsets + couplings — 5/5 exact six-knob recovery
-
-The same published target was then made into a more realistic matrix-level tuning problem:
-
-```text
-[d1, d2, d3, m12, m23, m13]
-```
-
-All three resonator self-detuning terms and all three couplings start wrong.
-
-Result:
-
-```text
-5/5 response pass
-5/5 six-knob recovery pass
-5/5 exact six-knob recovery
-worst overall parameter RMSE  0.009734
-worst detuning RMSE           0.013222
-worst coupling RMSE           0.003832
-```
-
-See:
-
-- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_PREREG.md`
-- `docs/BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_RESULT.md`
-
-### Generalized source–resonator–load matrices
-
-The repository now also contains the proper explicit-port formulation
+For the explicit source–resonator–load model,
 
 ```text
 A(Omega) = M + Omega U - j q
@@ -91,150 +23,158 @@ S11      = 1 + 2j [A^-1]_(S,S)
 S21      = -2j [A^-1]_(L,S)
 ```
 
-with audited exact gradients for arbitrary reciprocal matrix knobs:
-
-- `transientwave/generalized_coupling_matrix.py`
-- `tests/test_generalized_coupling_matrix.py`
-
-The current benchmark target is a published fourth-order cross-coupled tunable filter containing both resonator cross-coupling and direct source-load coupling, i.e. a topology designed around multiple transmission zeros.
-
----
-
-## Why the filter application is a natural TWC target
-
-The transient compiler and a classical coupling-matrix tuner are not identical physical models. What they share is the structural core:
-
-```text
-parameterized sparse symmetric operator
-        |
-        +-- reciprocal local edge stamps
-        +-- topology constraints
-        +-- exact local matrix derivative
-        +-- forward response
-        `-- inverse / adjoint sensitivity
-```
-
-For an explicit matrix parameter `p`, the filter layer uses
+and every physical knob has an exact inverse-matrix derivative
 
 ```text
 d A^-1 / dp = -A^-1 (dA/dp) A^-1.
 ```
 
-A diagonal resonator tuning knob is a one-entry stamp. A reciprocal coupling is a symmetric two-entry stamp. The same compiler-side sparse-parameter machinery can therefore reason about both without hand-differentiating a whole filter.
+So a diagonal knob can mean “this resonator is off frequency” and an off-diagonal symmetric knob can mean “this reciprocal coupling is wrong.”
 
-The practical next layers are measurement noise, actuator calibration, constrained topology, and larger published/real filters — not a fabrication run.
+### The result that matters most
+
+The v0.5 benchmark deliberately mixed the hidden seven-knob published cross-coupled matrix with:
+
+```text
+uniform resonator loss
+S11 phase offset + slope
+S21 phase offset + slope
+0.5% RMS amplitude noise
+0.5 degree RMS phase noise
+8 sweeps averaged
+```
+
+Against the same 15 frozen measurement/start cells:
+
+```text
+NAIVE  lossless matrix-only hidden-matrix recovery    0/15
+AWARE  matrix + loss + phase nuisance recovery       15/15
+```
+
+The important lesson is not another small RMSE number:
+
+> **Measurement-chain physics must be modeled separately, or reference-plane/calibration error can be converted into false physical coupling corrections.**
+
+See [`docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md`](docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md).
+
+---
+
+## Real measurement path
+
+The active branch now accepts ordinary two-port Touchstone data.
+
+```bash
+pip install -e .
+
+twc-filter inspect-s2p measured.s2p
+
+twc-filter prepare-s2p topology.json measured.s2p \
+  --center-hz 2450000000 \
+  --scale-hz 50000000 \
+  -o measurement.json
+
+twc-filter fit measurement.json -o tuned.json
+```
+
+The importer preserves physical frequency in hertz and records the explicit normalization
+
+```text
+Omega = (frequency_hz - center_hz) / scale_hz.
+```
+
+It does **not** silently guess the coupling-matrix frequency normalization.
+
+The two-port parser supports the practical first-VNA subset of Touchstone 1.x/2.0, `RI` / `MA` / `DB`, and both two-port data orders.
+
+See [`docs/FILTER_TUNING.md`](docs/FILTER_TUNING.md).
+
+---
+
+## Joint physical + nuisance fit
+
+A topology JSON may optionally expose bounded nuisance variables alongside matrix knobs:
+
+```json
+"nuisance": {
+  "resonator_loss": {"initial": 0.010, "min": 0.000, "max": 0.080},
+  "phi11":          {"initial": 0.000, "min": -0.50, "max": 0.50},
+  "tau11":          {"initial": 0.000, "min": -0.10, "max": 0.10},
+  "phi21":          {"initial": 0.000, "min": -0.50, "max": 0.50},
+  "tau21":          {"initial": 0.000, "min": -0.10, "max": 0.10}
+}
+```
+
+Missing nuisance fields remain fixed at zero, so older lossless specifications are backward compatible.
+
+The result separates:
+
+```text
+matrix                 inferred physical coupling matrix
+physical_s11 / s21     inferred filter before phase nuisance
+fitted_s11 / s21       complete predicted measured trace
+nuisance               inferred loss and reference-plane variables
+```
+
+---
+
+## Filter evidence ladder
+
+```text
+v0.1  published 3-resonator couplings                  5/5 exact
+v0.2  resonator offsets + couplings                    5/5 exact
+v0.3  published 6x6 cross-coupled topology             5/5 exact
+v0.4  zero-mean repeated complex measurement noise    15/15 robust
+v0.5  systematic loss + reference-plane nuisance      15/15 aware
+                                                      0/15 naive matrix recovery
+```
+
+The new product surface is covered by both the repository-wide test suite and a dedicated `filter-cli-ci` gate, including the nuisance gradients and Touchstone preparation path.
+
+---
+
+## Next structural question: is the topology itself wrong?
+
+The current fitter assumes that the declared reciprocal graph is correct. That is the next assumption worth attacking.
+
+Suppose the intended matrix omits one weak physical coupling:
+
+```text
+known topology + unknown parasitic reciprocal edge
+```
+
+A constrained fit cannot explain that edge away perfectly. The residual should contain a direction in response space corresponding to the missing symmetric matrix stamp.
+
+The next experiment asks whether TWC can:
+
+1. fit the declared topology and nuisance;
+2. score absent reciprocal edges directly from the structured complex residual and exact sensitivity;
+3. rank the true missing edge first;
+4. add it and jointly recover both the intended matrix and parasitic strength.
+
+That would move the tool from **parameter diagnosis** toward **topology diagnosis**.
 
 ---
 
 # TW-1A hardware research
 
-## Original question
+## What survived
 
-The hardware project asks whether a finite-time dissipative reciprocal computation can be lowered to wave coordinates so that a physical mesh regenerates enough transient history to train locally without storing the full trajectory:
+The hardware line produced real structural simplifications:
 
-```text
-stored trajectory: O(N*T)
-physical echo:      O(N) live wave state + O(E) credit state
-```
+- analog `-PREV` multiplier/trim deleted through state-bank orientation;
+- terminal analog clone deleted with common/difference reverse coordinates;
+- matched positive/negative error DACs deleted;
+- passive NEXT charge sharing rejected in ngspice and replaced by active virtual summing;
+- monolithic large self transfer replaced by reusable half-range transfers;
+- kick-drift `(Z,P)` coordinates passed deterministic algebra, echo boundary tests, state-range audit, and ngspice shear tests.
 
-The compiled deterministic recurrence is of the form
-
-```text
-z[n+1] = Q z[n] - z[n-1] + u[n]
-```
-
-with a sparse symmetric physical operator
-
-```text
-Q = diag(d) + sum_e a_e b_e b_e^T,
-b_e = e_i - e_j.
-```
-
-Each reciprocal edge is therefore one rank-one equal/opposite physical stamp rather than four independently matched matrix entries.
-
-## Structural circuit progress that survived
-
-The circuit branch repeatedly used failed gates to delete fragile operations:
-
-1. **Analog `-PREV` multiplier/trim deleted.** The `-1` history coefficient is structural through state-bank orientation.
-2. **Terminal analog clone deleted.** Reverse state moved to common/difference coordinates.
-3. **Matched positive/negative error DACs deleted.** One signed error waveform is enough.
-4. **Passive NEXT charge sharing rejected in ngspice.** It is state dependent; active virtual summing replaced it.
-5. **Monolithic `|self|=3` transfer rejected.** Two reusable half-range transfers satisfy the timing abstraction.
-6. **Kick-drift `(Z,P)` coordinates passed deterministic algebra and ngspice C1f shear tests.**
-
-The process-independent circuit ladder lives under `spice/`.
+The process-independent circuit ladder is retained under `spice/`.
 
 ## The important negative result
 
-The later v0.9 kick-drift rewrite made the known capacitor subtotal look dramatically better at a nominal common thermal base `b=2e-5`. That operating point did **not** survive a properly factored stochastic harness.
+At the attractive small-cap stochastic operating point, controlled task × fabrication × dynamic-noise experiments did not preserve the physical adjoint.
 
-Once task, fabricated silicon and dynamic noise were separated:
-
-```text
-fixed strongly learnable task 2400
-5 fabrication seeds
-5 dynamic seeds
-formal b=2e-5 point
-
-DeltaC >= +0.10    1/25
-exact > shuffled  16/25
-```
-
-A source factorial on fixed task/fabrication 2400 showed:
-
-```text
-thermal off                  median DeltaC +0.687113
-self thermal only            median DeltaC +0.149811
-edge thermal only            median DeltaC +0.019995
-drift thermal only           median DeltaC -0.014737
-all three                    median DeltaC +0.028717
-```
-
-The static/quantized fabricated body is therefore not the main failure. Sampled dynamic noise is.
-
-## Easy rescues were tested and rejected
-
-### Make the capacitors bigger
-
-A uniform thermal backoff swept all three sampled thermal bases together. Only `b=0` met the frozen robustness criterion. Even `b=2.5e-6` failed — despite implying 64× the capacitance of the attractive `b=2e-5` point.
-
-**Capacitor-only rescue rejected.**
-
-### Average more physical adjoints
-
-Complete physical gradients averaged per optimizer update:
-
-```text
-N=1    median DeltaC +0.028717
-N=4    median DeltaC -0.006610
-N=16   median DeltaC +0.080290
-N=64   median DeltaC +0.095307
-```
-
-Still not robust at 64× acquisition cost.
-
-### Forward-only perturbation
-
-The forward objective itself is highly trainable when dynamic thermal sampling is removed:
-
-```text
-clean SPSA median DeltaC          +0.446339
-clean 64-row Hadamard DeltaC      +0.839012
-```
-
-At `b=2e-5`, however:
-
-```text
-thermal SPSA              3/15 above +0.10
-64-row thermal Hadamard    2/5 above +0.10
-```
-
-The Hadamard estimator uses 256 forward traversals per optimizer update and still misses the frozen margin.
-
-## What the fixed-theta microscope says
-
-At one fixed theta, averaging **1024** noisy physical gradients still gives median:
+At one fixed parameter vector, even averaging **1024** independently noisy physical gradients gave median:
 
 ```text
 cosine to clean gradient        0.280
@@ -243,40 +183,15 @@ relative vector error           1.048
 relative trace standard error   0.521
 ```
 
-So the small-cap physical gradient is not merely a mildly noisy unbiased vector. It has extreme variance and evidence of a bias component. A likely physical reason is that the reverse pass receives new thermal packets rather than the stochastic history that perturbed the particular forward trajectory it is supposed to adjoint.
+The result is stronger than “the gradient is noisy.” There is evidence of a bias component.
 
-This does not invalidate deterministic echo mathematics. It limits the present **stochastic physical implementation** of that echo.
+> **A stochastic physical adjoint is not automatically an adjoint of a stochastic forward history.**
 
----
+The deterministic second-order trajectory can be reconstructible from terminal state while the particular stochastic forward trajectory also depends on random packets that the reverse traversal does not possess. A new noisy reverse traversal is therefore not automatically the adjoint of that realized forward history.
 
-## Current project split
+Capacitance backoff and brute-force gradient averaging did not rescue the attractive point. This parks the small-cap general on-device training claim without invalidating the deterministic echo mathematics or the circuit work.
 
-### TWC compiler / tuner — mainline
-
-Good current targets:
-
-- classical coupled-resonator filter synthesis/tuning;
-- measured resonator detuning and coupling correction;
-- mechanical/acoustic/metamaterial reciprocal systems;
-- any sparse symmetric linear wave model with a useful measured response and constrained topology.
-
-### TW-1A — research backend
-
-Worth preserving:
-
-- structural recurrence transformations;
-- reciprocal rank-one edge lowering;
-- active-summing switched-cap topology;
-- ngspice rejection/pass ladder;
-- kick-drift representation;
-- hardware-aware codebooks and calibration semantics;
-- controlled negative stochastic-learning results.
-
-Not currently supported:
-
-> **a claim that the `b=2e-5` small-cap TW-1A is an economical general on-device gradient-learning accelerator.**
-
-A future chip path would need a genuinely different physical estimator or a use case that does not require fast in-situ stochastic gradient recovery.
+See [`docs/HARDWARE_STATUS_2026-08-09.md`](docs/HARDWARE_STATUS_2026-08-09.md).
 
 ---
 
@@ -284,52 +199,36 @@ A future chip path would need a genuinely different physical estimator or a use 
 
 ```text
 transientwave/
-  compiler.py
-  physical.py
-  backend.py
+  compiler.py                       transient reciprocal compiler
+  physical.py                       TW-1A lowering
+  backend.py                        strict physical backend
 
-  # circuit research
-  circuit_emulator_v08_common_diff.py
-  circuit_emulator_v09_partitioned_rng.py
-  circuit_emulator_v09_kick_drift.py
-  kick_drift.py
+  generalized_coupling_matrix.py   explicit-port filter response + exact derivatives
+  measurement_aware_filter.py      loss + S11/S21 phase nuisance model
+  filter_tuning.py                 bounded physical+nuisance optimizer
+  filter_cli.py                    twc-filter command line
+  touchstone.py                     dependency-free two-port measurement reader
 
-  # filter / reciprocal-system application layer
-  coupled_resonator_filter.py
-  generalized_coupling_matrix.py
+  circuit_emulator_v09_*.py        controlled hardware stochastic emulation
+  kick_drift.py                     kick-drift representation
 
 experiments/
-  v09_*.py
-  v10_*.py
-  published_coupled_filter_v01.py
-  published_coupled_filter_v02.py
-  published_cross_coupled_filter_v03.py
+  published_*filter*.py             external-domain filter evidence ladder
+  v09_*.py / v10_*.py               stochastic-adjoint and forward-estimator tests
 
-spice/
-  check_c1b_passive_additivity.py
-  check_c1c_virtual_sum.py
-  check_c1d_finite_gain.py
-  check_c1e_finite_bandwidth.py
-  check_c1e2_self_slicing.py
-  check_c1e3_self_reuse.py
-  check_c1f_kick_drift_shear.py
-
-docs/
-  HARDWARE_STATUS_2026-08-09.md
-  BENCHMARK_V09_*_RESULT.md
-  BENCHMARK_V10_*_RESULT.md
-  BENCHMARK_PUBLISHED_COUPLED_FILTER_V01_RESULT.md
-  BENCHMARK_PUBLISHED_COUPLED_FILTER_V02_RESULT.md
+spice/                               circuit rejection/pass ladder
+docs/                                preregistrations, results, hardware status, tuner guide
+tests/                               compiler, circuit, filter, nuisance and Touchstone tests
 ```
 
-Failed preregistered gates are intentionally retained. In this repository they are part of the design record, not clutter: most of the useful architecture came from identifying which assumption should be deleted rather than tightening every tolerance.
+Failed preregistered gates are intentionally retained. In this repository they are part of the design record: many of the useful simplifications came from identifying which assumption should be deleted rather than merely tightening tolerances.
 
 ---
 
 ## Prior-art boundary
 
-This repository does **not** claim invention of adjoint optimization, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor damping transforms, physical wave computing, trainable scattering media, or classical microwave coupling-matrix synthesis.
+TWC does **not** claim invention of adjoint optimization, coupling-matrix synthesis/extraction, in-situ physical backpropagation, Hamiltonian echo learning, integrating-factor damping transforms, physical wave computing, or trainable scattering media.
 
-The narrower contribution being explored is the compiler/engineering combination:
+The narrower compiler/engineering contribution being explored is:
 
-> **Represent trainable reciprocal systems as constrained sparse symmetric operators, lower them into physically meaningful local parameters, preserve exact sensitivity structure, and make the assumptions/failure boundaries explicit enough that the same compiler can target both simulated tuning problems and future physical backends.**
+> **Represent reciprocal systems as constrained sparse symmetric operators, preserve exact sensitivity structure, jointly separate physical parameters from supported measurement nuisance, and make residual model mismatch explicit enough to diagnose when the declared physics itself is wrong.**

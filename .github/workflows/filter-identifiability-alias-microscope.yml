@@ -1,0 +1,27 @@
+name: filter-identifiability-alias-microscope
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'experiments/filter_identifiability_alias_microscope.py'
+      - 'transientwave/identifiability.py'
+      - '.github/workflows/filter-identifiability-alias-microscope.yml'
+  workflow_dispatch:
+
+jobs:
+  microscope:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run post-hoc alias microscope
+        run: python experiments/filter_identifiability_alias_microscope.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filter-identifiability-alias-microscope
+          path: filter-identifiability-alias-microscope.json

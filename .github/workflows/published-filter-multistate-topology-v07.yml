@@ -1,0 +1,75 @@
+name: published-filter-multistate-topology-v07
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/measurement_aware_filter.py'
+      - 'transientwave/topology_discovery.py'
+      - 'transientwave/multistate_filter.py'
+      - 'tests/test_measurement_aware_filter.py'
+      - 'tests/test_topology_discovery.py'
+      - 'tests/test_multistate_filter.py'
+      - 'experiments/published_filter_multistate_topology_v07.py'
+      - 'experiments/summarize_multistate_topology_v07.py'
+      - 'docs/BENCHMARK_PUBLISHED_FILTER_MULTISTATE_TOPOLOGY_V07_PREREG.md'
+      - '.github/workflows/published-filter-multistate-topology-v07.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, C, D]
+        case_id: [4400, 4401, 4402, 4403, 4404]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit nuisance, topology and multi-state gradients
+        run: >-
+          python -m unittest
+          tests.test_measurement_aware_filter
+          tests.test_topology_discovery
+          tests.test_multistate_filter
+          -v
+      - name: Diagnose shared hidden topology across known states
+        run: >-
+          python experiments/published_filter_multistate_topology_v07.py
+          --start ${{ matrix.start }}
+          --case ${{ matrix.case_id }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-multistate-v07-${{ matrix.start }}-${{ matrix.case_id }}
+          path: published-filter-multistate-v07-*.json
+
+  aggregate:
+    if: always()
+    needs: tune
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy
+      - name: Download all completed cell results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: published-filter-multistate-v07-*
+          path: results
+          merge-multiple: true
+      - name: Aggregate frozen clauses
+        run: >-
+          python experiments/summarize_multistate_topology_v07.py
+          results
+          --output published-filter-multistate-v07-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-multistate-v07-summary
+          path: published-filter-multistate-v07-summary.json

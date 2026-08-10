@@ -8,9 +8,13 @@ on:
       - 'pyproject.toml'
       - 'transientwave/coupled_resonator_filter.py'
       - 'transientwave/generalized_coupling_matrix.py'
+      - 'transientwave/measurement_aware_filter.py'
       - 'transientwave/filter_tuning.py'
       - 'transientwave/filter_cli.py'
+      - 'transientwave/touchstone.py'
       - 'tests/test_filter_tuning.py'
+      - 'tests/test_measurement_aware_filter.py'
+      - 'tests/test_touchstone.py'
       - '.github/workflows/filter-cli-ci.yml'
   workflow_dispatch:
 
@@ -24,6 +28,13 @@ jobs:
           python-version: '3.12'
       - run: pip install -e .
       - name: Run filter tool tests
-        run: python -m unittest tests.test_filter_tuning tests.test_generalized_coupling_matrix tests.test_coupled_resonator_filter -v
+        run: >-
+          python -m unittest
+          tests.test_filter_tuning
+          tests.test_measurement_aware_filter
+          tests.test_touchstone
+          tests.test_generalized_coupling_matrix
+          tests.test_coupled_resonator_filter
+          -v
       - name: Check console entry point
         run: twc-filter --help

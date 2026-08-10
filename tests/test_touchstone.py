@@ -10,6 +10,7 @@ import numpy as np
 from transientwave.filter_cli import main as filter_cli_main
 from transientwave.touchstone import (
     inject_touchstone_measurement,
+    normalized_omega_bandpass,
     normalized_omega_linear,
     parse_touchstone_2port_text,
 )
@@ -63,7 +64,25 @@ class TouchstoneTests(unittest.TestCase):
         )
         np.testing.assert_allclose(omega, [-1.0, 0.0, 1.0])
 
-    def test_prepare_s2p_cli_injects_measurement_into_topology(self):
+    def test_classical_bandpass_omega_mapping(self):
+        omega = normalized_omega_bandpass(
+            np.array([0.95e9, 1.0e9, 1.05e9]),
+            center_hz=1.0e9,
+            bandwidth_hz=100e6,
+        )
+        np.testing.assert_allclose(
+            omega,
+            [10.0 * (0.95 - 1.0 / 0.95), 0.0, 10.0 * (1.05 - 1.0 / 1.05)],
+        )
+        flipped = normalized_omega_bandpass(
+            np.array([0.95e9, 1.0e9, 1.05e9]),
+            center_hz=1.0e9,
+            bandwidth_hz=100e6,
+            omega_sign=-1.0,
+        )
+        np.testing.assert_allclose(flipped, -omega)
+
+    def test_prepare_s2p_cli_injects_linear_measurement_into_topology(self):
         topology = {
             "name": "touchstone-test",
             "model": "explicit-port",
@@ -107,7 +126,59 @@ class TouchstoneTests(unittest.TestCase):
             np.testing.assert_allclose(prepared["frequency_hz"], [100e6, 150e6, 200e6])
             self.assertEqual(prepared["measurement_source"]["format"], "touchstone")
             self.assertEqual(prepared["measurement_source"]["reference_ohm"], 50.0)
-            self.assertIn("prepared", buf.getvalue())
+            self.assertEqual(prepared["measurement_source"]["omega_mapping"]["mode"], "linear")
+            self.assertIn("mapping=linear", buf.getvalue())
+
+    def test_prepare_s2p_cli_classical_bandpass_mapping(self):
+        topology = {
+            "name": "touchstone-bandpass-test",
+            "model": "explicit-port",
+            "nodes": 4,
+            "parameters": [
+                {"name": "mS1", "i": 0, "j": 1, "initial": 0.8, "min": 0.3, "max": 1.4},
+                {"name": "m12", "i": 1, "j": 2, "initial": 0.7, "min": 0.2, "max": 1.2},
+                {"name": "m2L", "i": 2, "j": 3, "initial": 0.8, "min": 0.3, "max": 1.4},
+            ],
+        }
+        trace = """# MHz S RI R 50
+950 1 0  0.1 0  0.1 0  0 0
+1000 0.8 0  0.2 0  0.2 0  0.1 0
+1050 0.5 0  0.3 0  0.3 0  0.2 0
+"""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            topology_path = root / "topology.json"
+            trace_path = root / "trace.s2p"
+            output_path = root / "prepared.json"
+            topology_path.write_text(json.dumps(topology), encoding="utf-8")
+            trace_path.write_text(trace, encoding="ascii")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = filter_cli_main(
+                    [
+                        "prepare-s2p",
+                        str(topology_path),
+                        str(trace_path),
+                        "--center-hz",
+                        "1000000000",
+                        "--bandwidth-hz",
+                        "100000000",
+                        "-o",
+                        str(output_path),
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            prepared = json.loads(output_path.read_text(encoding="utf-8"))
+            expected = normalized_omega_bandpass(
+                np.array([950e6, 1000e6, 1050e6]),
+                center_hz=1e9,
+                bandwidth_hz=100e6,
+            )
+            np.testing.assert_allclose(prepared["omega"], expected)
+            mapping = prepared["measurement_source"]["omega_mapping"]
+            self.assertEqual(mapping["mode"], "bandpass")
+            self.assertEqual(mapping["bandwidth_hz"], 100e6)
+            self.assertIn("mapping=bandpass", buf.getvalue())
 
     def test_version2_requires_explicit_two_port_order(self):
         text = """[Version] 2.0
@@ -118,7 +189,7 @@ class TouchstoneTests(unittest.TestCase):
 1 1 0  0 0  0 0  1 0
 [End]
 """
-        with self.assertRaisesRegex(ValueError, "missing \[Two-Port Data Order\]"):
+        with self.assertRaisesRegex(ValueError, "missing \\[Two-Port Data Order\\]"):
             parse_touchstone_2port_text(text)
 
 

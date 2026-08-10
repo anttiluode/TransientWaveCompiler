@@ -6,11 +6,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .coupled_resonator_filter import MatrixParameter, matrix_from_parameters
 from .filter_analysis import compare_fit_result_ensembles, summarize_fit_results
 from .filter_tuning import (
     parse_filter_spec,
     parse_measurement_nuisance,
     tune_filter_spec,
+)
+from .topology_gauge import (
+    analyze_absent_edges_gauge,
+    single_detuning_anchors_that_break_alias,
 )
 from .touchstone import (
     inject_touchstone_bandpass_measurement,
@@ -128,6 +133,125 @@ def _add_compact_flag(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _parse_topology_nominal(spec: dict[str, Any]) -> tuple[int, list[MatrixParameter], list[float]]:
+    """Parse only the topology/nominal portion of a filter JSON.
+
+    Unlike ``parse_filter_spec``, this deliberately requires no measurement
+    arrays.  It is used by ``audit-topology`` before a sweep exists.
+    ``nominal`` is preferred; ``initial`` is accepted as a fallback so older
+    topology files remain usable.
+    """
+    model = str(spec.get("model", "explicit-port"))
+    if model != "explicit-port":
+        raise ValueError("audit-topology currently supports only model='explicit-port'")
+    nodes = int(spec["nodes"])
+    if nodes < 4:
+        raise ValueError("audit-topology requires source, >=2 internal resonators, and load")
+    raw = spec.get("parameters")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("parameters must be a non-empty list")
+
+    parameters: list[MatrixParameter] = []
+    values: list[float] = []
+    seen: set[tuple[int, int]] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("each parameter must be an object")
+        i = int(item["i"])
+        j = int(item["j"])
+        if not (0 <= i < nodes and 0 <= j < nodes):
+            raise ValueError("parameter endpoint out of range")
+        key = tuple(sorted((i, j)))
+        if key in seen:
+            raise ValueError(f"duplicate reciprocal matrix entry {key}")
+        seen.add(key)
+        name = str(item.get("name", f"m{i}{j}"))
+        raw_value = item.get("nominal", item.get("initial"))
+        if raw_value is None:
+            raise ValueError(f"parameter {name} requires nominal or initial value")
+        value = float(raw_value)
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError(f"parameter {name} nominal value must be finite")
+        parameters.append(MatrixParameter(i, j, name))
+        values.append(value)
+    return nodes, parameters, values
+
+
+def _audit_topology(spec: dict[str, Any], anchors: list[int]) -> dict[str, Any]:
+    nodes, parameters, values = _parse_topology_nominal(spec)
+    matrix = matrix_from_parameters(nodes, parameters, values)
+    rows = analyze_absent_edges_gauge(
+        matrix,
+        parameters,
+        anchors=tuple(anchors),
+    )
+    payload_rows = []
+    for row in rows:
+        item = row.as_dict()
+        # Always report what a *single* known diagonal resonator perturbation
+        # could do to the unanchored static ambiguity, even if --anchors was
+        # supplied for a hypothetical multi-state protocol.
+        item["single_detuning_anchors_that_break_static_alias"] = (
+            single_detuning_anchors_that_break_alias(
+                matrix,
+                parameters,
+                row.candidate,
+            )
+        )
+        payload_rows.append(item)
+    return {
+        "name": str(spec.get("name", "unnamed-topology")),
+        "model": "explicit-port",
+        "nodes": nodes,
+        "internal_resonators": nodes - 2,
+        "declared_parameters": len(parameters),
+        "known_detuning_anchor_nodes": [int(v) for v in anchors],
+        "uses_measurement_or_sparameters": False,
+        "candidate_edges": payload_rows,
+        "aliased_edges": [item["candidate"] for item in payload_rows if item["aliased"]],
+        "interpretation": (
+            "aliased=true means releasing that candidate zero opens a surviving "
+            "internal realization-rotation gauge at the supplied nominal matrix. "
+            "This is a structural negative-capability flag, not a guarantee that "
+            "aliased=false will be detectable at finite measurement noise."
+        ),
+    }
+
+
+def _audit_text(result: dict[str, Any]) -> str:
+    lines = [
+        f"{result['name']}: nodes={result['nodes']} internal_resonators={result['internal_resonators']} "
+        f"declared_parameters={result['declared_parameters']}",
+        "measurement data used: no",
+    ]
+    anchors = result.get("known_detuning_anchor_nodes", [])
+    if anchors:
+        lines.append("known detuning anchors: " + ", ".join(f"R{node}" for node in anchors))
+    lines.append("candidate static/gauge capability:")
+    for row in result["candidate_edges"]:
+        edge = tuple(row["candidate"])
+        if row["aliased"]:
+            suggested = row.get("single_detuning_anchors_that_break_static_alias", [])
+            suggestion = ", ".join(f"R{node}" for node in suggested) or "none found"
+            coeffs = row.get("unit_candidate_generator_coefficients") or {}
+            generator = ", ".join(coeffs) or "internal rotation"
+            lines.append(
+                f"  {edge}: ALIASED (gauge +{row['nullity_gain']}, {generator}); "
+                f"single-detuning anchor(s): {suggestion}"
+            )
+        else:
+            lines.append(f"  {edge}: no released exact gauge detected")
+    if result["aliased_edges"]:
+        lines.append(
+            "warning: aliased candidates cannot be uniquely labeled from the static model response alone"
+        )
+    else:
+        lines.append(
+            "no exact released gauge found; finite-noise/practical identifiability is still a separate question"
+        )
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="twc-filter",
@@ -183,6 +307,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     prepare_s2p.add_argument("-o", "--output", required=True, help="write fit-ready JSON here")
     _add_compact_flag(prepare_s2p)
+
+    audit = sub.add_parser(
+        "audit-topology",
+        help="audit absent edges for exact coupling-matrix realization gauge ambiguity without measurement data",
+    )
+    audit.add_argument("topology", help="topology JSON with nodes/parameters and nominal or initial values")
+    audit.add_argument(
+        "--anchors",
+        nargs="*",
+        type=int,
+        default=[],
+        metavar="NODE",
+        help="known physically detuned internal resonator nodes in a proposed multi-state protocol",
+    )
+    audit.add_argument("-o", "--output", help="write machine-readable capability report JSON here")
+    _add_compact_flag(audit)
 
     summarize = sub.add_parser(
         "summarize-results",
@@ -251,6 +391,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"prepared {args.output}: samples={data.samples}, mapping={mapping}, "
                 f"Omega={prepared['omega'][0]:+.6g}..{prepared['omega'][-1]:+.6g}"
             )
+            return 0
+
+        if args.command == "audit-topology":
+            result = _audit_topology(_load_json(args.topology), list(args.anchors))
+            print(_audit_text(result))
+            if args.output:
+                _write_json(args.output, result, compact=args.compact)
+                print(f"wrote {args.output}")
             return 0
 
         if args.command == "summarize-results":

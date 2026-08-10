@@ -8,7 +8,7 @@ Status: living boundary document, not an exhaustive literature review.
 
 The filter-tuning branch became useful quickly enough that it would be easy to overstate what is new.
 
-That would be a mistake. Coupling-matrix synthesis, extraction, reconfiguration, and computer-aided filter tuning are established fields. TWC should be evaluated on the narrower behavior it actually demonstrates, not on claims that belong to prior art.
+That would be a mistake. Coupling-matrix synthesis, extraction, reconfiguration, computer-aided tuning, and even localization of parasitic couplings are established research areas. TWC should be evaluated on the narrower behavior it actually demonstrates, not on claims that belong to prior art.
 
 ## Claims TWC does **not** make
 
@@ -20,7 +20,8 @@ TWC does not claim invention of:
 - recovering resonator losses / unloaded Q from lossy filter measurements;
 - using the difference between an extracted and target coupling matrix to guide physical tuning;
 - handling transmission-line/reference-plane phase without a mandatory separate de-embedding step in every method;
-- numerical, gradient-free, vector-fitting, Cauchy, isospectral-flow, or neural-network coupling-matrix extraction.
+- numerical, gradient-free, vector-fitting, Cauchy, homotopy-continuation, isospectral-flow, or neural-network coupling-matrix extraction;
+- detecting, locating, or fitting parasitic cross-couplings as a general concept.
 
 ## Concrete prior-art examples
 
@@ -35,7 +36,7 @@ DOI: `10.13164/re.2023.0325`.
 
 The paper explicitly supports predefined topologies and forms the rational polynomials from S-parameter responses **without first removing phase offset or de-embedding transmission lines**. It then generates the desired coupling-matrix configuration using bounded/unbounded nonlinear-polynomial optimization.
 
-This is important because it rules out an overbroad TWC claim such as “existing extraction always de-embeds phase first.”
+This rules out an overbroad TWC claim such as “existing extraction always de-embeds phase first.”
 
 ### Javadi et al. — lossy measurement extraction, 2023
 
@@ -58,6 +59,25 @@ DOI: `10.1016/j.aeue.2024.155572`.
 Their CAD process extracts a coupling matrix from S-parameters, compares the extracted coefficients with the target matrix, and uses the signs/differences to guide simultaneous physical dimension corrections.
 
 Therefore the broad idea “turn a measured response into coupling-matrix diagnosis and tuning corrections” is also established prior art.
+
+### Michalczyk and Michalski — measured parasitic cross-couplings, 2021
+
+J. Michalczyk and J. Michalski,
+“Coupling Matrix Extraction by Numerical Solving of Polynomial Systems by Homotopy Continuation,”
+*IEEE Microwave and Wireless Components Letters*, 2021.
+DOI: `10.1109/LMWC.2021.3096659`.
+
+The reported measurement validation includes a sixth-order filter containing regular and **parasitic cross-couplings**. Thus fitting measured responses that contain parasitic coupling structure is already part of the literature.
+
+### Michalczyk and Michalski — locating parasitic couplings, 2024
+
+J. Michalczyk and J. J. Michalski,
+“Method to Determine Parasitic Couplings in Microwave Filters,”
+*54th European Microwave Conference (EuMC)*, pp. 128–131, 2024.
+
+This work goes beyond merely fitting a matrix: it proposes a method for determining the **location of parasitic couplings** from S-parameter measurements, using slightly detuned resonators and differences between extracted coupling matrices.
+
+This is especially important for the TWC v0.6/v0.7 direction. “Parasitic topology discovery” by itself is **not** a defensible novelty claim. Deliberately perturbed multi-state measurements are also established as a way to expose parasitic structure.
 
 ### Sallam and Attiya — physics-informed extraction, 2026
 
@@ -123,7 +143,7 @@ Touchstone S11/S21
 
 That packaging can still be useful even when each mathematical ingredient has prior art.
 
-### 4. Parasitic topology discovery is not yet a qualified capability
+### 4. The v0.6 topology experiment qualifies a specific estimator only
 
 The preregistered v0.6 local residual-probe experiment produced:
 
@@ -136,17 +156,17 @@ primary discovery clause    FAIL
 
 Four of five hidden-edge locations were perfect across all starts. One hidden edge, `(2,5)=-0.025`, ranked `8,8,7` and failed systematically.
 
-Therefore TWC should **not** presently advertise automatic parasitic topology discovery as a solved feature.
+Therefore TWC should **not** advertise its current local residual-gradient scan as a reliable automatic parasitic-topology detector.
 
-The next research question is whether candidate-conditioned joint refitting can distinguish a missing edge after the wrong topology has already compensated by moving its allowed physical/nuisance variables.
+Even if a later candidate-conditioned or multi-state TWC method succeeds, the correct claim would concern the behavior and engineering properties of that **specific estimator** — for example joint nuisance handling, exact direct sensitivities, computational cost, robustness, or generalization across reciprocal systems — not invention of parasitic-coupling localization itself.
 
 ## Current defensible positioning
 
 A compact accurate description is:
 
-> **TWC is an experimental reciprocal-system diagnosis toolkit that directly fits constrained coupling-matrix physics and supported measurement nuisance to complex S-parameters using exact inverse-matrix sensitivities. Its frozen benchmarks show why omitted nuisance can corrupt inferred physical parameters, and its current research asks whether structured residuals can also diagnose missing topology.**
+> **TWC is an experimental reciprocal-system diagnosis toolkit that directly fits constrained coupling-matrix physics and supported measurement nuisance to complex S-parameters using exact inverse-matrix sensitivities. Its frozen benchmarks show how omitted nuisance can corrupt inferred physical parameters, and its research branch tests explicit model-mismatch diagnostics under preregistered failure gates.**
 
-That claim leaves established coupling-matrix extraction and computer-aided tuning where they belong: in the prior art.
+That leaves coupling-matrix extraction, computer-aided tuning, and parasitic-coupling localization where they belong: in the prior art.
 
 ## What would materially strengthen the project next
 
@@ -155,6 +175,7 @@ The highest-value evidence is no longer another synthetic low-RMSE fit.
 1. **Real VNA data:** repeat sweeps of a physical filter, then deliberate resonator/coupling perturbations with known direction.
 2. **Stability:** show that fitted physical corrections are reproducible across repeated sweeps while nuisance absorbs measurement-chain variation.
 3. **Predictive diagnosis:** after fitting one trace, make the prescribed physical adjustment and test whether the next trace moves in the predicted direction.
-4. **Topology research:** replace the failed one-shot local v0.6 rule with preregistered candidate-conditioned model comparison on fresh hidden-edge cases.
+4. **Topology research:** use the v0.6 failure to compare local residual scoring, candidate-conditioned refits, and multi-state/perturbation-aided identification without treating any of those broad ideas as automatically novel.
+5. **Cross-domain value:** test whether the same sparse-reciprocal diagnosis machinery transfers cleanly to a second domain rather than optimizing only for microwave-filter conventions.
 
-Those experiments distinguish a useful engineering tool from another coupling-matrix fitting implementation.
+Those experiments distinguish a useful reciprocal-system engineering tool from another coupling-matrix fitting implementation.

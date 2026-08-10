@@ -8,7 +8,7 @@ Status: living boundary document, not an exhaustive literature review.
 
 The filter-tuning branch became useful quickly enough that it would be easy to overstate what is new.
 
-That would be a mistake. Coupling-matrix synthesis, extraction, reconfiguration, computer-aided tuning, and even localization of parasitic couplings are established research areas. TWC should be evaluated on the narrower behavior it actually demonstrates, not on claims that belong to prior art.
+That would be a mistake. Coupling-matrix synthesis, extraction, reconfiguration, computer-aided tuning, similarity transformations between equivalent coupling-matrix realizations, and localization of parasitic couplings are established research areas. TWC should be evaluated on the narrower behavior it actually demonstrates, not on claims that belong to prior art.
 
 ## Claims TWC does **not** make
 
@@ -21,11 +21,54 @@ TWC does not claim invention of:
 - using the difference between an extracted and target coupling matrix to guide physical tuning;
 - handling transmission-line/reference-plane phase without a mandatory separate de-embedding step in every method;
 - numerical, gradient-free, vector-fitting, Cauchy, homotopy-continuation, isospectral-flow, or neural-network coupling-matrix extraction;
-- detecting, locating, or fitting parasitic cross-couplings as a general concept.
+- detecting, locating, or fitting parasitic cross-couplings as a general concept;
+- non-uniqueness of coupling-matrix realizations;
+- orthogonal/similarity transformations of the internal coupling matrix;
+- matrix/Givens rotations used to annihilate selected couplings and convert between response-equivalent topologies.
 
 ## Concrete prior-art examples
 
 This short list is intentionally selected around the claims most likely to be confused with TWC.
+
+### Atia, Williams, and Cameron — classical coupling-matrix realization freedom
+
+A. E. Atia and A. E. Williams,
+“New Types of Bandpass Filters for Satellite Transponders,”
+*COMSAT Technical Review*, vol. 1, no. 1, pp. 21–43, 1971.
+
+A. E. Atia and A. E. Williams,
+“Narrow-Bandpass Waveguide Filters,”
+*IEEE Transactions on Microwave Theory and Techniques*, vol. 20, no. 4, pp. 258–265, 1972.
+DOI: `10.1109/TMTT.1972.1127732`.
+
+R. J. Cameron,
+“General Coupling Matrix Synthesis Methods for Chebyshev Filtering Functions,”
+*IEEE Transactions on Microwave Theory and Techniques*, vol. 47, no. 4, pp. 433–442, 1999.
+DOI: `10.1109/22.754877`.
+
+R. J. Cameron,
+“Advanced Coupling Matrix Synthesis Techniques for Microwave Filters,”
+*IEEE Transactions on Microwave Theory and Techniques*, vol. 51, no. 1, pp. 1–10, 2003.
+DOI: `10.1109/TMTT.2002.806937`.
+
+The important boundary for TWC is classical: a coupling matrix is not a unique physical realization of a given two-port response. Internal resonator coordinates may be changed by orthogonal/similarity transformations while preserving the external filtering response, and sequences of matrix rotations are standard synthesis machinery for transforming one equivalent coupling topology into another.
+
+Therefore the v0.6 `(2,5)` result must **not** be described as discovery of a new invariance. Its machine-zero Jacobian novelty is a numerical manifestation of established coupling-matrix realization freedom.
+
+What the TWC branch now does with that old freedom is narrower and implementation-specific:
+
+1. form the internal rotation generators automatically;
+2. impose the declared zero pattern as gauge-fixing constraints;
+3. release one proposed absent edge;
+4. test whether that release increases the surviving internal-rotation nullity;
+5. if so, report the edge as statically gauge-aliased rather than inventing a confident topology rank;
+6. test which known resonator detunings would anchor the freed coordinate direction.
+
+For the published four-resonator folded topology this topology-only calculation predicts exactly two statically aliased absent edges, `(0,3)` and `(2,5)`, matching the independently computed response-Jacobian machine-zero aliases. This is a TWC result/engineering framing, **not yet a novelty claim**. A deeper literature audit would be required before claiming that automatic nullspace-based negative-capability reporting itself is new.
+
+A concise statement that stays on the safe side is:
+
+> **Topology discovery can be ill-posed when releasing a candidate zero re-opens a classical response-equivalent coupling-matrix realization gauge. TWC detects that condition explicitly and reports the resulting negative capability.**
 
 ### Ng et al. — modified vector fitting, 2023
 
@@ -143,7 +186,7 @@ Touchstone S11/S21
 
 That packaging can still be useful even when each mathematical ingredient has prior art.
 
-### 4. The v0.6 topology experiment qualifies a specific estimator only
+### 4. Frozen topology failures plus an exact negative-capability map
 
 The preregistered v0.6 local residual-probe experiment produced:
 
@@ -154,28 +197,38 @@ augmented recovery          12/15
 primary discovery clause    FAIL
 ```
 
-Four of five hidden-edge locations were perfect across all starts. One hidden edge, `(2,5)=-0.025`, ranked `8,8,7` and failed systematically.
+The preregistered v0.7 four-state perturbation experiment then produced:
 
-Therefore TWC should **not** advertise its current local residual-gradient scan as a reliable automatic parasitic-topology detector.
+```text
+true hidden edge top-1       9/15
+true hidden edge top-3       9/15
+augmented recovery           9/15
+primary discovery clause     FAIL
+primary recovery clause      FAIL
+```
 
-Even if a later candidate-conditioned or multi-state TWC method succeeds, the correct claim would concern the behavior and engineering properties of that **specific estimator** — for example joint nuisance handling, exact direct sensitivities, computational cost, robustness, or generalization across reciprocal systems — not invention of parasitic-coupling localization itself.
+In v0.7 the three non-gauge hidden-edge classes were perfect across all starts. The two classes that the topology-only similarity analysis marks as static gauge aliases, `(0,3)` and `(2,5)`, failed across all starts even though the known detuning schedule breaks the exact gauge. Thus gauge-breaking is necessary but not sufficient for robust finite-noise ranking after a flexible wrong model has compensated.
+
+Separately, the topology-only gauge calculation requires no measured S-parameters and no optimizer outcome. On the published folded topology it predicts exactly the two response-Jacobian machine-zero aliases and identifies the physical resonator coordinates whose detuning anchors each exact ambiguity.
+
+This is useful as a **negative capability / experiment-design report** even though automatic topology discovery remains unqualified.
 
 ## Current defensible positioning
 
 A compact accurate description is:
 
-> **TWC is an experimental reciprocal-system diagnosis toolkit that directly fits constrained coupling-matrix physics and supported measurement nuisance to complex S-parameters using exact inverse-matrix sensitivities. Its frozen benchmarks show how omitted nuisance can corrupt inferred physical parameters, and its research branch tests explicit model-mismatch diagnostics under preregistered failure gates.**
+> **TWC is an experimental reciprocal-system diagnosis toolkit that directly fits constrained coupling-matrix physics and supported measurement nuisance to complex S-parameters using exact inverse-matrix sensitivities. It also audits whether a proposed topology change is statically distinguishable or lies on a classical response-equivalent realization gauge, so the software can report when the measurement cannot uniquely support a physical-topology claim.**
 
-That leaves coupling-matrix extraction, computer-aided tuning, and parasitic-coupling localization where they belong: in the prior art.
+That leaves coupling-matrix extraction, matrix rotations, computer-aided tuning, and parasitic-coupling localization where they belong: in the prior art.
 
 ## What would materially strengthen the project next
 
-The highest-value evidence is no longer another synthetic low-RMSE fit.
+The highest-value evidence is no longer another synthetic low-RMSE fit or hit-rate ladder.
 
-1. **Real VNA data:** repeat sweeps of a physical filter, then deliberate resonator/coupling perturbations with known direction.
+1. **Real multi-state data:** repeat sweeps of a physical filter/resonator, then deliberate resonator/coupling perturbations with known direction.
 2. **Stability:** show that fitted physical corrections are reproducible across repeated sweeps while nuisance absorbs measurement-chain variation.
 3. **Predictive diagnosis:** after fitting one trace, make the prescribed physical adjustment and test whether the next trace moves in the predicted direction.
-4. **Topology research:** use the v0.6 failure to compare local residual scoring, candidate-conditioned refits, and multi-state/perturbation-aided identification without treating any of those broad ideas as automatically novel.
+4. **Detectability:** estimate sweep covariance and replace normalized novelty alone with a noise-whitened residual/Fisher score for choosing useful physical perturbations.
 5. **Cross-domain value:** test whether the same sparse-reciprocal diagnosis machinery transfers cleanly to a second domain rather than optimizing only for microwave-filter conventions.
 
-Those experiments distinguish a useful reciprocal-system engineering tool from another coupling-matrix fitting implementation.
+Until physical multi-state data is available, the synthetic topology-discovery ladder is deliberately stopped at v0.7.

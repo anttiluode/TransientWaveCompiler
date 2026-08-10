@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .filter_analysis import compare_fit_result_ensembles, summarize_fit_results
 from .filter_tuning import (
     parse_filter_spec,
     parse_measurement_nuisance,
@@ -21,8 +22,14 @@ from .touchstone import (
 def _load_json(path: str) -> dict[str, Any]:
     obj = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(obj, dict):
-        raise ValueError("filter specification must be a JSON object")
+        raise ValueError("filter specification/result must be a JSON object")
     return obj
+
+
+def _load_many(paths: list[str]) -> list[dict[str, Any]]:
+    if not paths:
+        raise ValueError("at least one result JSON is required")
+    return [_load_json(path) for path in paths]
 
 
 def _write_json(path: str, obj: dict[str, Any], *, compact: bool) -> None:
@@ -73,6 +80,43 @@ def _summary(result: dict[str, Any]) -> str:
         diagnosis_parts.append(part)
     if diagnosis_parts:
         lines.append("diagnosis: " + "; ".join(diagnosis_parts))
+    return "\n".join(lines)
+
+
+def _ensemble_summary_text(summary: dict[str, Any]) -> str:
+    lines = [f"runs={summary['runs']}"]
+    for row in summary["physical_parameters"]:
+        lines.append(
+            f"{row['name']}: mean={row['mean']:+.8g} std={row['std']:.3e} "
+            f"range={row['range']:.3e}"
+        )
+    if summary["nuisance_parameters"]:
+        lines.append("nuisance:")
+        for row in summary["nuisance_parameters"]:
+            lines.append(
+                f"  {row['name']}: mean={row['mean']:+.8g} std={row['std']:.3e} "
+                f"range={row['range']:.3e}"
+            )
+    return "\n".join(lines)
+
+
+def _comparison_text(result: dict[str, Any]) -> str:
+    lines = [
+        f"baseline_runs={result['baseline_runs']} perturbed_runs={result['perturbed_runs']}",
+        "physical shifts:",
+    ]
+    for row in result["physical_shifts"]:
+        ratio = row["shift_over_baseline_std"]
+        ratio_text = "inf/undefined" if ratio is None else f"{ratio:.3g}x baseline_std"
+        lines.append(
+            f"  {row['name']}: shift={row['mean_shift']:+.8g} "
+            f"rank[{row['kind']}]={row['absolute_shift_rank_within_kind']} "
+            f"({ratio_text})"
+        )
+    if result["nuisance_shifts"]:
+        lines.append("nuisance shifts:")
+        for row in result["nuisance_shifts"]:
+            lines.append(f"  {row['name']}: shift={row['mean_shift']:+.8g}")
     return "\n".join(lines)
 
 
@@ -140,6 +184,33 @@ def main(argv: list[str] | None = None) -> int:
     prepare_s2p.add_argument("-o", "--output", required=True, help="write fit-ready JSON here")
     _add_compact_flag(prepare_s2p)
 
+    summarize = sub.add_parser(
+        "summarize-results",
+        help="summarize repeatability across independently fitted sweep result JSON files",
+    )
+    summarize.add_argument("results", nargs="+", help="fit result JSON files from repeated sweeps")
+    summarize.add_argument("-o", "--output", help="write ensemble summary JSON here")
+    _add_compact_flag(summarize)
+
+    compare = sub.add_parser(
+        "compare-results",
+        help="compare baseline and deliberately perturbed fit-result ensembles",
+    )
+    compare.add_argument(
+        "--baseline",
+        nargs="+",
+        required=True,
+        help="baseline fit result JSON files (shell globs may expand here)",
+    )
+    compare.add_argument(
+        "--perturbed",
+        nargs="+",
+        required=True,
+        help="perturbed fit result JSON files",
+    )
+    compare.add_argument("-o", "--output", help="write comparison JSON here")
+    _add_compact_flag(compare)
+
     args = parser.parse_args(argv)
 
     try:
@@ -173,8 +244,6 @@ def main(argv: list[str] | None = None) -> int:
                     scale_hz=args.scale_hz,
                     source=str(args.s2p),
                 )
-            # Validate the generated object immediately so a bad topology or
-            # normalization never gets written as a supposedly fit-ready file.
             parse_filter_spec(prepared)
             _write_json(args.output, prepared, compact=args.compact)
             mapping = prepared["measurement_source"]["omega_mapping"]["mode"]
@@ -182,6 +251,25 @@ def main(argv: list[str] | None = None) -> int:
                 f"prepared {args.output}: samples={data.samples}, mapping={mapping}, "
                 f"Omega={prepared['omega'][0]:+.6g}..{prepared['omega'][-1]:+.6g}"
             )
+            return 0
+
+        if args.command == "summarize-results":
+            result = summarize_fit_results(_load_many(args.results))
+            print(_ensemble_summary_text(result))
+            if args.output:
+                _write_json(args.output, result, compact=args.compact)
+                print(f"wrote {args.output}")
+            return 0
+
+        if args.command == "compare-results":
+            result = compare_fit_result_ensembles(
+                _load_many(args.baseline),
+                _load_many(args.perturbed),
+            )
+            print(_comparison_text(result))
+            if args.output:
+                _write_json(args.output, result, compact=args.compact)
+                print(f"wrote {args.output}")
             return 0
 
         if args.command == "fit":

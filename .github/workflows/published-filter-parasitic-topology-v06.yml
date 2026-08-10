@@ -1,0 +1,64 @@
+name: published-filter-parasitic-topology-v06
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'transientwave/measurement_aware_filter.py'
+      - 'transientwave/topology_discovery.py'
+      - 'tests/test_measurement_aware_filter.py'
+      - 'tests/test_topology_discovery.py'
+      - 'experiments/published_filter_parasitic_topology_v06.py'
+      - 'experiments/summarize_parasitic_topology_v06.py'
+      - 'docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_PREREG.md'
+      - '.github/workflows/published-filter-parasitic-topology-v06.yml'
+  workflow_dispatch:
+
+jobs:
+  tune:
+    strategy:
+      fail-fast: false
+      matrix:
+        start: [A, C, D]
+        case_id: [4300, 4301, 4302, 4303, 4304]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Audit nuisance and missing-edge sensitivity machinery
+        run: python -m unittest tests.test_measurement_aware_filter tests.test_topology_discovery -v
+      - name: Discover and refit hidden parasitic edge
+        run: python experiments/published_filter_parasitic_topology_v06.py --start ${{ matrix.start }} --case ${{ matrix.case_id }}
+      - name: Upload cell result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-parasitic-v06-${{ matrix.start }}-${{ matrix.case_id }}
+          path: published-filter-parasitic-v06-*.json
+
+  aggregate:
+    if: always()
+    needs: tune
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy
+      - name: Download all completed cell results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: published-filter-parasitic-v06-*
+          path: results
+          merge-multiple: true
+      - name: Aggregate frozen clauses
+        run: python experiments/summarize_parasitic_topology_v06.py results --output published-filter-parasitic-v06-summary.json
+      - name: Upload aggregate result
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-filter-parasitic-v06-summary
+          path: published-filter-parasitic-v06-summary.json

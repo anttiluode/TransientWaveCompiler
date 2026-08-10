@@ -51,12 +51,18 @@ AWARE systematic recovery     15/15
 
 That is the useful product-side result: **measurement-chain physics must be separated from physical coupling corrections, or calibration/reference-plane error can be converted into false tuning instructions.**
 
-Read the frozen result:
+The active branch now exposes that nuisance-aware model through `twc-filter` and includes a two-port `.s2p` Touchstone path:
+
+```text
+inspect-s2p -> explicit frequency normalization -> declared topology -> joint physical+nuisance fit
+```
+
+Read:
 
 - [Systematic nuisance benchmark v0.5](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md)
-- [`twc-filter` documentation](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_TUNING.md)
+- [`twc-filter` / Touchstone workflow](https://github.com/anttiluode/TransientWaveCompiler/blob/agent/tw1a-common-diff-v08/docs/FILTER_TUNING.md)
 
-The next practical gates are real `.s2p` Touchstone ingestion, then real measured hardware, followed by **unknown parasitic topology discovery** rather than another clean synthetic matrix.
+The next external falsifier is now **real measured hardware**, not another synthetic trace. In parallel, the next structural question is **unknown parasitic topology discovery**: can the residual identify a reciprocal edge that the declared model forgot?
 
 ---
 
@@ -105,6 +111,6 @@ The second question is currently producing the stronger application.
 
 ## Repository status
 
-`main` is now the stable public landing page. The active research/compiler branch is [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08), which contains the current tuner, benchmarks, circuit research record, and executable tests.
+`main` is now the stable public landing page. The active research/compiler branch is [`agent/tw1a-common-diff-v08`](https://github.com/anttiluode/TransientWaveCompiler/tree/agent/tw1a-common-diff-v08), which contains the current tuner, Touchstone reader, benchmarks, circuit research record, and executable tests.
 
 A future promotion to `main` should be a curated compiler release rather than a blind merge of the full research history.

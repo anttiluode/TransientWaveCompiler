@@ -96,14 +96,14 @@ Example:
   "model": "explicit-port",
   "nodes": 6,
   "parameters": [
-    {"name": "mS1", "i": 0, "j": 1, "initial": 0.80, "min": 0.40, "max": 1.50},
-    {"name": "d1",  "i": 1, "j": 1, "initial": 0.00, "min": -0.50, "max": 0.50},
-    {"name": "m12", "i": 1, "j": 2, "initial": -0.60, "min": -1.50, "max": -0.20},
-    {"name": "m23", "i": 2, "j": 3, "initial": 0.95, "min": 0.20, "max": 1.30},
-    {"name": "m34", "i": 3, "j": 4, "initial": -1.05, "min": -1.50, "max": -0.20},
-    {"name": "m4L", "i": 4, "j": 5, "initial": 1.15, "min": 0.40, "max": 1.50},
-    {"name": "m14", "i": 1, "j": 4, "initial": -0.05, "min": -0.70, "max": 0.40},
-    {"name": "mSL", "i": 0, "j": 5, "initial": 0.020, "min": -0.05, "max": 0.05}
+    {"name": "mS1", "i": 0, "j": 1, "initial": 0.80, "nominal": 1.02, "min": 0.40, "max": 1.50},
+    {"name": "d1",  "i": 1, "j": 1, "initial": 0.00, "nominal": 0.00, "min": -0.50, "max": 0.50},
+    {"name": "m12", "i": 1, "j": 2, "initial": -0.60, "nominal": -0.86, "min": -1.50, "max": -0.20},
+    {"name": "m23", "i": 2, "j": 3, "initial": 0.95, "nominal": 0.77, "min": 0.20, "max": 1.30},
+    {"name": "m34", "i": 3, "j": 4, "initial": -1.05, "nominal": -0.86, "min": -1.50, "max": -0.20},
+    {"name": "m4L", "i": 4, "j": 5, "initial": 1.15, "nominal": 1.02, "min": 0.40, "max": 1.50},
+    {"name": "m14", "i": 1, "j": 4, "initial": -0.05, "nominal": -0.19, "min": -0.70, "max": 0.40},
+    {"name": "mSL", "i": 0, "j": 5, "initial": 0.020, "nominal": 0.0005, "min": -0.05, "max": 0.05}
   ],
   "optimizer": {
     "iterations": 1200,
@@ -121,6 +121,34 @@ nodes-1       load
 ```
 
 `i == j` represents a diagonal resonator self-detuning parameter. `i != j` represents one reciprocal coupling. The same reciprocal matrix entry cannot be declared twice.
+
+### `initial` versus `nominal`
+
+These fields have different jobs:
+
+```text
+initial   starting point supplied to the optimizer
+nominal   intended/design value used only for diagnosis
+```
+
+`nominal` is optional and does not affect the fit. When it is present, the result contains a `diagnosis` row with:
+
+```text
+fitted value
+fitted - nominal
+percent deviation when nominal != 0
+frequency-equivalent deviation when a linear Touchstone Omega scale is known
+```
+
+For a linear mapping, the reported frequency-equivalent deviation is simply
+
+```text
+(fitted - nominal) * scale_hz.
+```
+
+For a diagonal resonator detuning this is the directly useful frequency-offset interpretation under the chosen normalized model. For an off-diagonal coupling it is a **coupling-frequency equivalent**, not a claim about screw travel, gap distance, or any other actuator calibration.
+
+This distinction lets a topology file represent the intended design while `initial` remains free to be a deliberately poor optimizer start.
 
 ---
 
@@ -165,6 +193,7 @@ The result JSON distinguishes:
 - `fitted_s11` / `fitted_s21`: predicted trace including fitted measurement phase nuisance;
 - `physical_s11` / `physical_s21`: inferred physical filter response before the phase nuisance;
 - `matrix`: inferred reciprocal physical coupling matrix;
+- `diagnosis`: optional fitted-minus-nominal correction rows;
 - `nuisance`: inferred loss/reference-plane variables and their bounds/gradients.
 
 This is important because a low residual by itself is not enough. The goal is to avoid converting cable/reference-plane error into false physical screw corrections.
@@ -200,7 +229,7 @@ twc-filter fit measurement.json --validate-only
 Example output:
 
 ```text
-valid explicit-port filter spec: nodes=6, knobs=8, samples=1201, iterations=1200, measurement_model=joint-nuisance, free_nuisance=5
+valid explicit-port filter spec: nodes=6, knobs=8, samples=1201, iterations=1200, measurement_model=joint-nuisance, free_nuisance=5, nominal_knobs=8
 ```
 
 ## Fit output
@@ -209,12 +238,13 @@ valid explicit-port filter spec: nodes=6, knobs=8, samples=1201, iterations=1200
 twc-filter fit measurement.json -o tuned.json
 ```
 
-The console prints the initial/final loss, recovered matrix knobs, and any free nuisance variables. `tuned.json` also contains:
+The console prints the initial/final loss, recovered matrix knobs, any free nuisance variables, and fitted-minus-nominal diagnosis when design values are present. `tuned.json` also contains:
 
 - parameter order and bounds;
-- initial/final values;
+- initial/final/nominal values;
 - initial/final exact gradients;
 - fitted symmetric matrix;
+- diagnosis rows and frequency-equivalent corrections when available;
 - nuisance estimates;
 - measured, fitted, and inferred-physical complex `S11`/`S21` arrays;
 - physical frequency metadata when the input came through Touchstone;
@@ -236,6 +266,7 @@ v0.3  published 6x6 cross-coupled topology             5/5 exact
 v0.4  zero-mean repeated complex measurement noise    15/15 robust
 v0.5  loss + reference-plane systematic nuisance      15/15 aware
                                                       0/15 naive hidden-matrix recovery
+v0.6  one hidden parasitic reciprocal edge             preregistered/running
 ```
 
 The v0.5 comparison is the reason nuisance variables are now part of the product surface. A lossless/no-phase model could fit toward the trace only by corrupting physical matrix estimates; the joint model recovered the hidden matrix on all frozen cells.
@@ -247,6 +278,7 @@ See:
 - `docs/BENCHMARK_PUBLISHED_CROSS_COUPLED_FILTER_V03_RESULT.md`
 - `docs/BENCHMARK_PUBLISHED_FILTER_NOISY_MEASUREMENT_V04_RESULT.md`
 - `docs/BENCHMARK_PUBLISHED_FILTER_SYSTEMATIC_NUISANCE_V05_RESULT.md`
+- `docs/BENCHMARK_PUBLISHED_FILTER_PARASITIC_TOPOLOGY_V06_PREREG.md`
 
 ---
 
@@ -256,7 +288,7 @@ The fitter still assumes:
 
 - a real-symmetric reciprocal coupling matrix;
 - explicit source and load nodes;
-- a user-declared physical topology;
+- a user-declared physical topology for ordinary `fit`;
 - one common resonator loss value when loss fitting is enabled;
 - linear phase nuisance versus normalized `Omega`;
 - bounded continuous matrix knobs;
@@ -266,9 +298,9 @@ The fitter still assumes:
 
 The next external falsifier is therefore simple and physical:
 
-> **measure a real two-port resonator filter on a VNA, declare the topology, and see whether TWC gives stable, physically interpretable diagnoses across repeated sweeps and deliberate tuning changes.**
+> **measure a real two-port resonator filter on a VNA, declare the topology and nominal design, and see whether TWC gives stable, physically interpretable diagnoses across repeated sweeps and deliberate tuning changes.**
 
-In parallel, the next synthetic structural gate is **parasitic topology discovery**: hide one weak reciprocal edge that is absent from the declared topology, ask whether the constrained residual identifies the correct missing edge, then jointly recover its strength and the intended matrix.
+In parallel, v0.6 attacks the structural assumption with **parasitic topology discovery**: hide one weak reciprocal edge that is absent from the declared topology, ask whether the constrained residual identifies the correct missing edge, then jointly recover its strength and the intended matrix.
 
 ## Deliberate boundary from TW-1A
 

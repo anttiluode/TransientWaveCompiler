@@ -33,9 +33,9 @@ class FilterTuningTests(unittest.TestCase):
             "model": "explicit-port",
             "nodes": 4,
             "parameters": [
-                {"name": "mS1", "i": 0, "j": 1, "initial": 0.72, "min": 0.3, "max": 1.4},
-                {"name": "m12", "i": 1, "j": 2, "initial": 0.88, "min": 0.2, "max": 1.2},
-                {"name": "m2L", "i": 2, "j": 3, "initial": 1.20, "min": 0.3, "max": 1.4},
+                {"name": "mS1", "i": 0, "j": 1, "initial": 0.72, "nominal": 1.0, "min": 0.3, "max": 1.4},
+                {"name": "m12", "i": 1, "j": 2, "initial": 0.88, "nominal": 0.62, "min": 0.2, "max": 1.2},
+                {"name": "m2L", "i": 2, "j": 3, "initial": 1.20, "nominal": 1.0, "min": 0.3, "max": 1.4},
             ],
             "omega": omega.tolist(),
             "s11": {"real": np.real(s11).tolist(), "imag": np.imag(s11).tolist()},
@@ -70,9 +70,9 @@ class FilterTuningTests(unittest.TestCase):
             "model": "explicit-port",
             "nodes": 4,
             "parameters": [
-                {"name": "mS1", "i": 0, "j": 1, "initial": 0.82, "min": 0.3, "max": 1.4},
-                {"name": "m12", "i": 1, "j": 2, "initial": 0.79, "min": 0.2, "max": 1.2},
-                {"name": "m2L", "i": 2, "j": 3, "initial": 1.13, "min": 0.3, "max": 1.4},
+                {"name": "mS1", "i": 0, "j": 1, "initial": 0.82, "nominal": 1.0, "min": 0.3, "max": 1.4},
+                {"name": "m12", "i": 1, "j": 2, "initial": 0.79, "nominal": 0.62, "min": 0.2, "max": 1.2},
+                {"name": "m2L", "i": 2, "j": 3, "initial": 1.13, "nominal": 1.0, "min": 0.3, "max": 1.4},
             ],
             "omega": omega.tolist(),
             "s11": {"real": np.real(s11).tolist(), "imag": np.imag(s11).tolist()},
@@ -91,6 +91,7 @@ class FilterTuningTests(unittest.TestCase):
         nodes, knobs, omega, s11, s21, opt = parse_filter_spec(self.make_spec())
         self.assertEqual(nodes, 4)
         self.assertEqual([k.name for k in knobs], ["mS1", "m12", "m2L"])
+        self.assertEqual([k.nominal for k in knobs], [1.0, 0.62, 1.0])
         self.assertEqual(len(omega), 121)
         self.assertEqual(s11.shape, (121,))
         self.assertEqual(s21.shape, (121,))
@@ -105,6 +106,8 @@ class FilterTuningTests(unittest.TestCase):
         self.assertEqual(result["parameter_order"], ["mS1", "m12", "m2L"])
         self.assertEqual(result["measurement_model"], "lossless")
         self.assertFalse(result["nuisance"]["enabled"])
+        self.assertEqual(len(result["diagnosis"]), 3)
+        self.assertLess(max(abs(row["deviation_normalized"]) for row in result["diagnosis"]), 5e-4)
 
     def test_joint_nuisance_tuner_recovers_hidden_matrix_and_measurement_physics(self):
         spec, matrix_target, nuisance_target = self.make_aware_spec()
@@ -118,6 +121,27 @@ class FilterTuningTests(unittest.TestCase):
         self.assertIn("physical_s11", result)
         self.assertIn("physical_s21", result)
 
+    def test_nominal_diagnosis_uses_touchstone_frequency_scale(self):
+        spec = self.make_spec()
+        spec["parameters"][0]["nominal"] = 0.90
+        spec["parameters"][1]["nominal"] = 0.60
+        spec["parameters"][2]["nominal"] = 1.05
+        spec["measurement_source"] = {
+            "format": "touchstone",
+            "omega_mapping": {
+                "mode": "linear",
+                "center_hz": 150e6,
+                "scale_hz": 50e6,
+            },
+        }
+        result = tune_filter_spec(spec)
+        rows = {row["name"]: row for row in result["diagnosis"]}
+        self.assertAlmostEqual(rows["mS1"]["deviation_normalized"], 0.10, delta=5e-4)
+        self.assertAlmostEqual(rows["mS1"]["frequency_equivalent_deviation_hz"], 5e6, delta=2.5e4)
+        self.assertAlmostEqual(rows["m12"]["frequency_equivalent_deviation_hz"], 1e6, delta=2.5e4)
+        self.assertAlmostEqual(rows["m2L"]["frequency_equivalent_deviation_hz"], -2.5e6, delta=2.5e4)
+        self.assertIsNotNone(rows["m12"]["deviation_percent"])
+
     def test_cli_validate_only(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as f:
             json.dump(self.make_spec(), f)
@@ -128,6 +152,7 @@ class FilterTuningTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("valid explicit-port filter spec", buf.getvalue())
         self.assertIn("measurement_model=lossless", buf.getvalue())
+        self.assertIn("nominal_knobs=3", buf.getvalue())
 
     def test_cli_validate_only_reports_joint_nuisance(self):
         spec, _matrix_target, _nuisance_target = self.make_aware_spec()

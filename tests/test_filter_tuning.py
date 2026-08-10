@@ -121,7 +121,7 @@ class FilterTuningTests(unittest.TestCase):
         self.assertIn("physical_s11", result)
         self.assertIn("physical_s21", result)
 
-    def test_nominal_diagnosis_uses_touchstone_frequency_scale(self):
+    def test_nominal_coupling_diagnosis_does_not_invent_resonance_hz(self):
         spec = self.make_spec()
         spec["parameters"][0]["nominal"] = 0.90
         spec["parameters"][1]["nominal"] = 0.60
@@ -137,10 +137,11 @@ class FilterTuningTests(unittest.TestCase):
         result = tune_filter_spec(spec)
         rows = {row["name"]: row for row in result["diagnosis"]}
         self.assertAlmostEqual(rows["mS1"]["deviation_normalized"], 0.10, delta=5e-4)
-        self.assertAlmostEqual(rows["mS1"]["frequency_equivalent_deviation_hz"], 5e6, delta=2.5e4)
-        self.assertAlmostEqual(rows["m12"]["frequency_equivalent_deviation_hz"], 1e6, delta=2.5e4)
-        self.assertAlmostEqual(rows["m2L"]["frequency_equivalent_deviation_hz"], -2.5e6, delta=2.5e4)
+        self.assertAlmostEqual(rows["m12"]["deviation_normalized"], 0.02, delta=5e-4)
+        self.assertAlmostEqual(rows["m2L"]["deviation_normalized"], -0.05, delta=5e-4)
         self.assertIsNotNone(rows["m12"]["deviation_percent"])
+        self.assertNotIn("resonance_deviation_hz", rows["m12"])
+        self.assertEqual(result["measurement_source"]["omega_mapping"]["mode"], "linear")
 
     def test_cli_validate_only(self):
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as f:

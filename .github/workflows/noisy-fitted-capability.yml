@@ -1,0 +1,60 @@
+name: noisy-fitted-capability
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'docs/NOISY_FITTED_CAPABILITY_GATE_2026-08-15.md'
+      - 'experiments/noisy_fitted_capability_gate.py'
+      - '.github/workflows/noisy-fitted-capability.yml'
+  workflow_dispatch:
+
+jobs:
+  noisy-fitted-capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+
+      - name: Download exact frozen v0.7 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: anttiluode/TransientWaveCompiler
+          run-id: 31359232293
+          pattern: published-filter-multistate-v07-*
+          path: old_v07
+
+      - name: Audit downloaded fitted cells
+        shell: bash
+        run: |
+          set -euo pipefail
+          find old_v07 -type f -name 'published-filter-multistate-v07-*.json' -print | sort
+          count=$(find old_v07 -type f -name 'published-filter-multistate-v07-*.json' | wc -l)
+          test "$count" -ge 15
+
+      - name: Run preregistered noisy fitted-point gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python experiments/noisy_fitted_capability_gate.py old_v07 \
+            --output noisy_fitted_capability_gate.json \
+            | tee noisy_fitted_capability_gate.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: noisy-fitted-capability
+          path: |
+            noisy_fitted_capability_gate.json
+            noisy_fitted_capability_gate.log
+          if-no-files-found: warn
+          retention-days: 14

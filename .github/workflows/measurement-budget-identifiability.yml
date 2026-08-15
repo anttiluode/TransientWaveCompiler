@@ -1,0 +1,31 @@
+name: measurement-budget-identifiability
+
+on:
+  push:
+    branches:
+      - agent/tw1a-common-diff-v08
+    paths:
+      - 'docs/MEASUREMENT_BUDGET_IDENTIFIABILITY_GATE_2026-08-15.md'
+      - 'experiments/measurement_budget_identifiability_gate.py'
+      - '.github/workflows/measurement-budget-identifiability.yml'
+  workflow_dispatch:
+
+jobs:
+  capability-budget:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Run preregistered measurement-budget gate
+        run: python experiments/measurement_budget_identifiability_gate.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: measurement-budget-identifiability
+          path: measurement_budget_identifiability_gate.json
+          if-no-files-found: warn
+          retention-days: 14

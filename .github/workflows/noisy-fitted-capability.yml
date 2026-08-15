@@ -7,6 +7,7 @@ on:
     paths:
       - 'docs/NOISY_FITTED_CAPABILITY_GATE_2026-08-15.md'
       - 'experiments/noisy_fitted_capability_gate.py'
+      - 'experiments/noisy_fitted_capability_gate_fast.py'
       - '.github/workflows/noisy-fitted-capability.yml'
   workflow_dispatch:
 
@@ -45,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python experiments/noisy_fitted_capability_gate.py old_v07 \
+          python experiments/noisy_fitted_capability_gate_fast.py old_v07 \
             --output noisy_fitted_capability_gate.json \
             | tee noisy_fitted_capability_gate.log
 

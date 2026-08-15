@@ -1,7 +1,7 @@
 # Finite-horizon / finite-measurement capability bridge
 
 Date: 2026-08-15  
-Status: **cross-project engineering note / prior-art-aware proposal**
+Status: **cross-project engineering bridge; first native-domain gate passed**
 
 This note imports one conservative object from `anttiluode/Dig` into the active TWC line.
 
@@ -11,19 +11,26 @@ The practical question is:
 
 > TWC already asks whether a measurement can distinguish a physical candidate from fitted model/nuisance directions. Can the same capability audit be made explicitly dependent on **measurement budget** — samples, channels, and perturbation states?
 
-TWC's current published-filter model is natively frequency-domain. Therefore the first executable gate should stay in that domain rather than manufacture a time axis with a band-limited IFFT.
+TWC's current published-filter model is natively frequency-domain, so the first executable gate stayed in that domain rather than manufacturing a time axis with a band-limited IFFT.
 
 ---
 
 ## Existing TWC capability layers
 
-### 1. Exact topology gauge
+### Exact topology gauge
 
 `topology_gauge.py` asks whether opening a proposed absent coupling re-opens an exact response-equivalent internal realization direction.
 
-If yes, one static external response cannot uniquely label the literal internal edge.
+For the published folded four-pole topology the two exact static aliases are:
 
-### 2. Response-space local identifiability
+```text
+(0,3)   frees R1 <-> R3 rotation
+(2,5)   frees R2 <-> R4 rotation
+```
+
+The capability map predicts which known resonator detunings break each ambiguity.
+
+### Response-space local identifiability
 
 `identifiability.py` forms a realified response Jacobian `J` and candidate derivative `g`, then reports
 
@@ -33,27 +40,11 @@ eta = ||(I-P_J) g|| / ||g||.
 
 This distinguishes raw sensitivity from candidate sensitivity that remains new after the fitted physical+nuisance model has been allowed to compensate.
 
-The capability-map documentation already points toward whitening the residual by measured sweep covariance for real-data experiment design.
-
 ---
 
-# The exact candidate-information scalar
+# The candidate-information scalar
 
-For a chosen set of measurement rows `S` — frequencies, channels, perturbation states, or any fixed combination — let
-
-```text
-J_S
-```
-
-be the fitted physical+nuisance tangent matrix and
-
-```text
-g_S
-```
-
-the derivative for one proposed hidden physical parameter.
-
-Under equal independent white measurement noise, define
+For a chosen set of measurement rows `S` — frequencies, channels, perturbation states, or any fixed combination — define
 
 ```text
 I_c(S)
@@ -61,53 +52,39 @@ I_c(S)
     = ||(I-P_J_S) g_S||^2.
 ```
 
-Up to the noise variance, this is the **conditional Fisher information** for the candidate parameter after the fitted/nuisance parameters are allowed to compensate. It is the squared residual already implicit in TWC's novelty calculation.
+Under equal independent white measurement noise this is conditional Fisher information up to the noise variance. It is the squared residual already implicit in TWC's novelty calculation.
 
-With a known whitening operator `W_S^(1/2)`, replace both blocks by their whitened versions:
+With known measurement covariance, whiten the rows before applying the same construction.
 
-```text
-I_c(S)
-  = min_beta || W_S^(1/2) (g_S - J_S beta) ||^2.
-```
+## Monotonicity for nested measurements
 
-## Important correction: this quantity is monotone for nested measurement sets
-
-If `S1` is a subset of `S2`, then
+For a fixed parameterization,
 
 ```text
-I_c(S2) >= I_c(S1).
+S1 subset S2  =>  I_c(S1) <= I_c(S2).
 ```
 
-Reason: for every coefficient vector `beta`, the `S2` objective equals the old nonnegative residual on `S1` plus nonnegative residual from the added rows. Taking the minimum cannot make it smaller than the old minimum.
+For every compensation vector `beta`, the larger objective is the old residual plus additional nonnegative row residuals. Taking the minimum preserves the inequality.
 
-So the earlier warning in this note that the accumulated orthogonal candidate energy might decrease under re-projection was too pessimistic. The **fraction**
-
-```text
-eta(S) = sqrt(I_c(S)) / ||g_S||
-```
-
-can still move non-monotonically, but the conditional residual energy `I_c(S)` itself is monotone for a fixed parameterization and nested row sets.
+The normalized angle-like novelty fraction `eta` need not be monotone because the raw candidate norm also changes. The accumulated conditional information `I_c` is the monotone quantity.
 
 This is the closest TWC analogue of Dig's monotone pairwise discrimination energy.
 
 ---
 
-# Structural impossibility versus practical immaturity
-
-The existing exact gauge and the finite-measurement scalar now separate two cases cleanly:
+# Structural impossibility versus finite-measurement weakness
 
 ```text
 STRUCTURAL IMPOSSIBILITY
-    exact gauge / exact response-equivalent direction
-    I_c(full allowed experiment) = 0 in the ideal model
-    more samples of the same experiment cannot help
+    exact gauge survives the declared experiment
+    candidate conditional information remains zero
 
-PRACTICAL IMMaturity / CONDITIONING
-    I_c(full allowed experiment) > 0
-    but a small measurement subset has accumulated little of it
+FINITE-MEASUREMENT WEAKNESS
+    candidate is identifiable in principle
+    but the selected states/channels/samples expose little unique information
 ```
 
-For a frozen full protocol `S_full`, define descriptive candidate maturity
+For a frozen full protocol one can define a descriptive acquisition maturity
 
 ```text
 M_c(S) = I_c(S) / I_c(S_full)
@@ -115,166 +92,156 @@ M_c(S) = I_c(S) / I_c(S_full)
 
 when the denominator is nonzero.
 
-This is a measurement-budget CDF-like object, not a new probability or time coordinate.
+This is a measurement-budget bookkeeping quantity, not a new time coordinate.
 
 ---
 
-# What TWC could report
+# Native-domain gate actually run
 
-For each candidate physical direction and declared protocol:
+Gate:
 
-```text
-exact gauge alias?                         existing
-full-protocol novelty eta                  existing
-conditional information I_c(S)            proposed
-measurement maturity M_c(S)                proposed
-candidate information by channel           proposed
-candidate information by perturbation      proposed
-frequency localization of residual signal  proposed
-best next measurement block                proposed
-```
+- `docs/MEASUREMENT_BUDGET_IDENTIFIABILITY_GATE_2026-08-15.md`
 
-The report can then use ordinary engineering language:
+Result:
+
+- `docs/MEASUREMENT_BUDGET_IDENTIFIABILITY_RESULT_2026-08-15.md`
+
+The run used the existing published target and the exact v0.7 measurement ingredients:
 
 ```text
-WAIT / ACQUIRE MORE
-    current nested measurement is still accumulating useful conditional information
+OMEGA imported from published_cross_coupled_filter_v03.py
+    np.unique(concatenate([
+        linspace(-30,+30,601),
+        linspace(-3,+3,601),
+    ]))
 
-CHANGE CHANNEL
-    another measured S-parameter exposes more candidate information
+actual floating-point grid rows in the benchmark: 1189
 
-PERTURB
-    a known physical state change breaks or weakens an ambiguity
+states:
+    BASE
+    R1_UP    d1=+0.080
+    R2_DOWN  d2=-0.070
+    R4_UP    d4=+0.060
 
-CANNOT RESOLVE
-    exact gauge remains under the declared experiment family
+channels:
+    S11
+    S21
+    joint S11+S21
 
-STOP
-    the requested information fraction has already been captured
+candidate panel:
+    all eight absent reciprocal edges
 ```
 
-No novelty claim is made for these decision roles.
+No candidate subset was selected after seeing the result.
 
 ---
 
-# First cheap executable gate: stay in TWC's native frequency domain
+# Main result
 
-Do **not** start with a synthetic impulse response.
+The two exact static aliases calibrated at numerical zero in BASE.
 
-Use the existing published-filter model exactly where it already lives:
+Then their conditional information appeared almost exclusively in the physical anchor states predicted independently by the topology-gauge calculation.
 
-```text
-OMEGA = linspace(-2.2, 2.2, 1201)
-channels = S11 / S21
-v0.7 state schedule:
-  BASE
-  R1_UP    known d1 = +0.080
-  R2_DOWN  known d2 = -0.070
-  R4_UP    known d4 = +0.060
-```
-
-Frozen candidate classes:
+## `(0,3)`
 
 ```text
-exact-gauge anchors
-    (0,3)
-    (2,5)
-
-robust non-gauge classes from the capability map
-    (0,2)
-    (1,4)
-    (3,5)
+BASE                                  ~7.8e-27
+BASE + R1_UP                           5.8095
++ R2_DOWN                              5.8108
++ R4_UP                                5.8115
 ```
 
-At the published target matrix and one frozen nominal loss, build a **shared-physical / state-specific-nuisance** tangent model matching the v0.7 protocol:
+Full residual-information allocation:
 
 ```text
-shared columns
-    q_source, q_load, fitted diagonal/coupling parameters
-
-state-specific nuisance columns
-    resonator loss
-    S11 phase / delay
-    S21 phase / delay
+R1_UP       99.974%
+all other states combined ~0.026%
 ```
 
-The known diagonal perturbation in each state is fixed, not fitted.
-
-For each candidate, compare:
+## `(2,5)`
 
 ```text
-BASE only
-BASE + R1_UP
-BASE + R1_UP + R2_DOWN
-all four states
+BASE                                  ~5.5e-27
+BASE + R1_UP                          ~9.5e-27
++ R2_DOWN                              3.1364
++ R4_UP                                5.4394
 ```
 
-and channel routes:
+Full allocation:
 
 ```text
-S11 only
-S21 only
-S11 + S21
+R2_DOWN      57.11%
+R4_UP        42.32%
+BASE+R1_UP    0.57%
 ```
 
-## Frequency-budget diagnostic
+The six non-gauge absent-edge controls instead allocate roughly one quarter of their residual information to each state.
 
-For the final full-row projection, decompose the squared residual candidate signal by frequency bin. Report:
+Therefore the finite-budget view adds a real experiment-design statement beyond the old full-window novelty scalar:
 
-```text
-number/fraction of frequencies carrying 50% and 90% of final residual energy
-most informative frequency regions
-which state/channel contributes the residual energy
-```
-
-Then validate any proposed reduced frequency set by **recomputing** `I_c(S)` on that subset rather than assuming the fixed full-fit residual decomposition remains optimal.
-
-The first gate does not need a noise threshold. It asks only whether the existing full sweep contains a highly concentrated or highly diffuse conditional-information pattern.
+> **it localizes which known physical perturbation creates the information that breaks an otherwise exact response ambiguity.**
 
 ---
 
-# Kill conditions
+# Channel choice also matters
 
-This bridge earns implementation value only if it changes an actual protocol decision beyond the current full-window novelty scalar. For example:
+Candidate directions have different readout ceilings.
+
+Examples of one-channel conditional information divided by joint S11+S21 information:
 
 ```text
-a known perturbation changes an exact/near alias into measurable conditional information;
-a channel choice changes the information ceiling substantially;
-a small targeted frequency subset recovers most of full-protocol I_c;
-or the tool correctly identifies an exact direction for which more of the same measurement cannot help.
+candidate     S11       S21
+
+(0,2)         0.938     0.059
+(0,4)         0.355     0.616
+(1,3)         0.704     0.278
+(2,4)         0.560     0.393
+(3,5)         0.877     0.095
 ```
 
-If all candidates simply acquire information in the same state/channel/frequency proportions and the finite-budget view merely redraws the full-sweep ranking, keep the existing identifiability tools and stop.
+The two gauge aliases also benefit from joint channels because the same compensating physical parameters must satisfy both responses simultaneously.
+
+So `ROUTE / CHANGE CHANNEL` has a concrete capability meaning here.
 
 ---
 
-# Relation to Dig
+# Frequency targeting is secondary
 
-Dig measured
+The full-fit residual can be localized by frequency, but the first gate did **not** find a tiny set of magic bins.
+
+Across candidates, roughly 265--573 of the existing 1189 benchmark rows carry 90% of the fixed full-fit residual energy.
+
+After re-fitting compensation on reduced frequency subsets, 512 oracle-selected rows recover about 74%--99% of full conditional information depending on candidate; 256 rows give a much broader range.
+
+Thus frequency selection is a plausible candidate-specific compression optimization, not the headline result.
+
+The current row counts are properties of this synthetic benchmark grid and are not VNA point-count recommendations.
+
+---
+
+# Practical report shape
+
+TWC can now plausibly expose a capability report such as:
 
 ```text
-D_C,T^2(i,j)
-    = integral_0^T ||h_i(t)-h_j(t)||^2 dt
+candidate (2,5)
+
+STATIC STATUS
+    exact BASE gauge alias
+
+PERTURBATION
+    R1_UP       no useful new information
+    R2_DOWN     opens direction
+    R4_UP       adds complementary information
+
+CHANNELS
+    S11 and S21 complementary; keep both
+
+FREQUENCY BUDGET
+    moderate concentration only; do not collapse to a tiny sweep yet
 ```
 
-for alternative source causes under one receiver/readout.
-
-TWC's analogue is parameter-space rather than source-space:
-
-```text
-candidate physical direction
-        -> response derivative g
-fitted/nuisance directions
-        -> tangent matrix J
-measurement protocol S
-        -> conditional information I_c(S)
-```
-
-The shared abstraction is simply:
-
-> **A measurement operator induces a finite-budget information geometry over alternatives.**
-
-That is enough. No Geometric-Neuron or Clockfield mechanism is imported.
+This is more useful than returning a literal hidden-edge ranking when the measurement does not support that confidence.
 
 ---
 
@@ -284,8 +251,8 @@ Finite-horizon observability/reachability Gramians, Fisher information, conditio
 
 TWC should not claim those constructions.
 
-The potentially useful software contribution is narrower:
+The useful software intersection is narrower:
 
-> **combine topology-gauge impossibility, nuisance-aware reciprocal response sensitivities, and measurement-budget conditional information into one capability report that can recommend acquire / channel / perturb / stop rather than over-identifying a physical topology.**
+> **combine topology-gauge impossibility, nuisance-aware reciprocal response sensitivities, and finite-measurement conditional information into one capability report that can recommend acquire / channel / perturb / stop rather than over-identifying a physical topology.**
 
-That is an engineering hypothesis and needs the executable gate above.
+Next technical requirement before hardware claims: replace identity weighting with covariance estimated from repeated sweeps and test whether capability-guided protocols improve the existing noisy topology-recovery failures.
